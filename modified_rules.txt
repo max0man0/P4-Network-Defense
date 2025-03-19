@@ -1,0 +1,1375 @@
+if Inter-packet Time <= 0.19:
+    if New Addresses Seen <= 0.50:
+    if Port <= 5.00:
+    Drop Internal Flooding
+else:
+    Drop Internal Spoofing
+else:
+    if New Addresses Seen <= 7.50:
+    if hopCount <= 2.50:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.01:
+    if Source <= 84.50:
+    if Source <= 19.50:
+    if New Addresses Seen <= 6.50:
+    if Inter-packet Time <= -3.82:
+    if Source <= 7.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 6.50:
+    if Inter-packet Time <= 0.01:
+    if hopCount <= 3.50:
+    if Source <= 15.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.00:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Inter-packet Time <= 0.01:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 1.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 5.50:
+    if Source <= 79.50:
+    if hopCount <= 5.50:
+    if Source <= 64.50: 
+    if Source <= 59.50:
+    if hopCount <= 4.50:
+    Drop External Flooding
+else:
+    Drop External Spoofing
+else:
+    if hopCount <= 4.50:
+    Drop External Spoofing
+else:
+    Drop External Flooding
+else:
+    if Inter-packet Time <= -15.53:
+    if Prefix Inter-packet Time <= -104.16:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.00:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if hopCount <= 6.50:
+    if Source <= 75.50:
+    if New Addresses Seen <= 2.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.00:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if hopCount <= 5.50:
+    if Prefix Inter-packet Time <= -15.47:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 2.50:
+    if Prefix Inter-packet Time <= 0.00:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.01:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if hopCount <= 6.50:
+    if Inter-packet Time <= -23.55:
+    if Prefix Inter-packet Time <= -83.24:
+    Drop External Flooding
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 81.50:
+    Drop External Flooding
+else:
+    Drop External Flooding
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 6.50:
+    if Source <= 24.50:
+    if hopCount <= 3.50:
+    if Inter-packet Time <= -2.12:
+    if Source <= 22.00:
+    # Do nothing, go to next
+else:
+    Drop External Flooding
+else:
+    if Inter-packet Time <= 0.01:
+    Drop External Flooding
+else:
+    Drop External Flooding
+else:
+    Drop DDOS
+else:
+    if hopCount <= 3.50:
+    if Prefix Inter-packet Time <= -15.45:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.00:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Source <= 39.50:
+    if Inter-packet Time <= -15.58:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Source <= 44.50:
+    Drop External Flooding
+else:
+    Drop External Spoofing
+else:
+    if Inter-packet Time <= 0.01:
+    if hopCount <= 6.50:
+    if Prefix Inter-packet Time <= -82.32:
+    Drop DDOS
+else:
+    if Source <= 20.50:
+    Drop DDOS
+else:
+    Drop External Flooding
+else:
+    Drop DDOS
+else:
+    if Source <= 47.00:
+    Drop External Flooding
+else:
+    if Source <= 78.00:
+    if hopCount <= 5.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if hopCount <= 4.50:
+    Drop DDOS
+else:
+    Drop External Flooding
+else:
+    if hopCount <= 6.50:
+    if New Addresses Seen <= 6.50:
+    if Prefix Inter-packet Time <= -15.50:
+    if New Addresses Seen <= 4.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.01:
+    if Inter-packet Time <= 0.01:
+    if Inter-packet Time <= 0.00:
+    if Inter-packet Time <= 0.00:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 2.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if New Addresses Seen <= 2.50:
+    if Inter-packet Time <= 0.01:
+    Drop DDOS
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.01:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Source <= 94.50:
+    if Prefix Inter-packet Time <= -15.49:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 98.50:
+    if Inter-packet Time <= 0.01:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 2.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= -15.48:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 6.50:
+    if hopCount <= 6.50:
+    if New Addresses Seen <= 3.50:
+    if New Addresses Seen <= 2.50:
+    if hopCount <= 3.50:
+    if Inter-packet Time <= 0.01:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.10:
+    if Inter-packet Time <= 0.09:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Source <= 47.00:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if New Addresses Seen <= 1.50:
+    if Source <= 24.50:
+    if Source <= 13.50:
+    Drop DDOS
+else:
+    Drop External Spoofing
+else:
+    if Source <= 31.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.02:
+    if Source <= 60.50:
+    Drop External Spoofing
+else:
+    Drop External Flooding
+else:
+    if Inter-packet Time <= 0.02:
+    Drop DDOS
+else:
+    Drop External Spoofing
+else:
+    if Source <= 15.50:
+    if hopCount <= 3.50:
+    if Source <= 12.50:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.04:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.02:
+    Drop External Spoofing
+else:
+    if Source <= 10.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if hopCount <= 3.50:
+    if Source <= 28.50:
+    if Source <= 19.50:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.18:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.13:
+    if Source <= 18.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Source <= 39.50:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.02:
+    if Source <= 84.50:
+    if New Addresses Seen <= 5.50:
+    if Source <= 79.50:
+    if hopCount <= 5.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if hopCount <= 5.50:
+    Drop External Spoofing
+else:
+    Drop External Flooding
+else:
+    if Source <= 25.50:
+    if Source <= 14.50:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.02:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.01:
+    if Inter-packet Time <= 0.01:
+    if Source <= 91.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 4.50:
+    if Inter-packet Time <= 0.02:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    Drop External Spoofing
+else:
+    if hopCount <= 3.50:
+    if Source <= 26.50:
+    if Source <= 14.50:
+    if Prefix Inter-packet Time <= 0.02:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if New Addresses Seen <= 5.50:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 4.50:
+    if Source <= 101.50:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.19:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if New Addresses Seen <= 4.50:
+    if Source <= 100.50:
+    if Source <= 25.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.05:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Source <= 6.50:
+    Drop DDOS
+else:
+    if Source <= 25.50:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    if Source <= 92.00:
+    Drop DDOS
+else:
+    if Source <= 101.50:
+    if Inter-packet Time <= 0.06:
+    if Source <= 100.50:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.03:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.10:
+    if Inter-packet Time <= 0.10:
+    if Prefix Inter-packet Time <= 0.07:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 97.00:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 4.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 3.50:
+    if Source <= 23.50:
+    if Source <= 15.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.18:
+    if Prefix Inter-packet Time <= 0.01:
+    if Inter-packet Time <= 0.01:
+    Drop DDOS
+else:
+    Drop External Flooding
+else:
+    if Prefix Inter-packet Time <= 0.02:
+    if Prefix Inter-packet Time <= 0.01:
+    Drop DDOS
+else:
+    Drop External Flooding
+else:
+    if Inter-packet Time <= 0.04:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.04:
+    # Do nothing, go to next
+else:
+    if Source <= 56.00:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 8.50:
+    if Prefix Inter-packet Time <= 0.01:
+    if Source <= 79.50:
+    if Prefix Inter-packet Time <= 0.01:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 86.00:
+    if Prefix Inter-packet Time <= -22.84:
+    Drop DDOS
+else:
+    Drop External Flooding
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.02:
+    if Inter-packet Time <= 0.02:
+    if hopCount <= 5.50:
+    Drop DDOS
+else:
+    if hopCount <= 6.50:
+    if Inter-packet Time <= 0.01:
+    # Do nothing, go to next
+else:
+    Drop External Flooding
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.07:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.08:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.09:
+    if Inter-packet Time <= 0.09:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 98.50:
+    if hopCount <= 3.50:
+    if Source <= 21.50:
+    if Source <= 18.50:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.05:
+    if Inter-packet Time <= 0.02:
+    if Prefix Inter-packet Time <= 0.02:
+    if Prefix Inter-packet Time <= 0.02:
+    if Prefix Inter-packet Time <= 0.01:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 20.50:
+    if New Addresses Seen <= 19.50:
+    if Inter-packet Time <= 0.03:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.02:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 18.50:
+    if Inter-packet Time <= 0.02:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.04:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.17:
+    if Inter-packet Time <= 0.15:
+    if Inter-packet Time <= 0.12:
+    if New Addresses Seen <= 16.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 17.00:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 38.50:
+    Drop DDOS
+else:
+    if Source <= 41.50:
+    if hopCount <= 4.50:
+    if Inter-packet Time <= 0.03:
+    if Inter-packet Time <= 0.02:
+    if Inter-packet Time <= 0.01:
+    if Inter-packet Time <= 0.00:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.01:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.02:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 16.00:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.18:
+    if New Addresses Seen <= 9.50:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 13.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 4.50:
+    Drop DDOS
+else:
+    if Source <= 58.50:
+    Drop DDOS
+else:
+    if Source <= 61.50:
+    if hopCount <= 5.50:
+    if New Addresses Seen <= 19.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 78.50:
+    Drop DDOS
+else:
+    if Source <= 81.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if hopCount <= 6.50:
+    Drop DDOS
+else:
+    if Source <= 101.50:
+    if New Addresses Seen <= 10.50:
+    if Source <= 99.50:
+    if Prefix Inter-packet Time <= 0.03:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.06:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 16.50:
+    if Source <= 99.50:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.17:
+    if Inter-packet Time <= 0.09:
+    if Prefix Inter-packet Time <= 0.07:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.03:
+    if Inter-packet Time <= 0.01:
+    if Inter-packet Time <= 0.00:
+    if Source <= 100.00:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 19.50:
+    # Do nothing, go to next
+else:
+    if Source <= 100.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.05:
+    if Inter-packet Time <= 0.04:
+    if Prefix Inter-packet Time <= 0.03:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 99.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.07:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.07:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 0.50:
+    if Port <= 5.00:
+    Drop Internal Flooding
+else:
+    Drop Internal Spoofing
+else:
+    if New Addresses Seen <= 6.50:
+    if Inter-packet Time <= 2.16:
+    if Prefix Inter-packet Time <= 0.21:
+    if Source <= 16.50:
+    if hopCount <= 3.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 3.50:
+    if New Addresses Seen <= 2.50:
+    if hopCount <= 3.50:
+    Drop External Spoofing
+else:
+    if Inter-packet Time <= 0.20:
+    Drop DDOS
+else:
+    if Source <= 70.50:
+    if Source <= 61.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 3.50:
+    if Source <= 31.00:
+    # Do nothing, go to next
+else:
+    if Source <= 40.50:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.20:
+    if Inter-packet Time <= 0.19:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Source <= 92.50:
+    if hopCount <= 6.50:
+    if Source <= 86.50:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 3.50:
+    if Source <= 20.50:
+    if New Addresses Seen <= 5.00:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 101.50:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 4.50:
+    if Source <= 77.00:
+    if Source <= 51.50:
+    if hopCount <= 6.00:
+    if Prefix Inter-packet Time <= 0.21:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 5.50:
+    if Source <= 62.50:
+    if Source <= 52.00:
+    if Inter-packet Time <= 0.20:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 4.50:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if hopCount <= 6.50:
+    if Source <= 102.00:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 3.50:
+    if New Addresses Seen <= 2.50:
+    if Inter-packet Time <= 0.24:
+    if Prefix Inter-packet Time <= 0.21:
+    if Prefix Inter-packet Time <= 0.21:
+    if hopCount <= 3.50:
+    if Source <= 32.00:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.23:
+    if Inter-packet Time <= 0.22:
+    if Inter-packet Time <= 0.22:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Prefix Inter-packet Time <= 0.22:
+    if Inter-packet Time <= 0.22:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 97.50:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.23:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.23:
+    if Inter-packet Time <= 0.23:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 5.50:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 3.50:
+    if Source <= 70.00:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 27.00:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.29:
+    if Prefix Inter-packet Time <= 0.24:
+    Drop DDOS
+else:
+    if Source <= 31.00:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.30:
+    Drop DDOS
+else:
+    if Source <= 47.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.29:
+    if Inter-packet Time <= 0.21:
+    if Inter-packet Time <= 0.21:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Source <= 11.50:
+    if Source <= 9.00:
+    if Prefix Inter-packet Time <= 0.22:
+    if Prefix Inter-packet Time <= 0.22:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Inter-packet Time <= 0.22:
+    if Prefix Inter-packet Time <= 0.22:
+    if Source <= 14.50:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    if Inter-packet Time <= 0.25:
+    if Inter-packet Time <= 0.23:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.25:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.29:
+    Drop DDOS
+else:
+    if hopCount <= 4.50:
+    # Do nothing, go to next
+else:
+    if Source <= 40.50:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.38:
+    if Inter-packet Time <= 0.30:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.38:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 2.50:
+    # Do nothing, go to next
+else:
+    if Source <= 12.00:
+    if Inter-packet Time <= 0.23:
+    if hopCount <= 3.50:
+    if Source <= 8.50:
+    if Inter-packet Time <= 0.21:
+    Drop External Spoofing
+else:
+    if Inter-packet Time <= 0.22:
+    # Do nothing, go to next
+else:
+    Drop External Spoofing
+else:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.29:
+    if New Addresses Seen <= 5.50:
+    Drop External Spoofing
+else:
+    if Source <= 7.50:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.24:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 5.00:
+    Drop External Spoofing
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.27:
+    if Prefix Inter-packet Time <= 0.22:
+    if Source <= 81.00:
+    if hopCount <= 6.50:
+    if Source <= 27.00:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 6.50:
+    if Source <= 101.00:
+    Drop External Spoofing
+else:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 78.50:
+    if Inter-packet Time <= 0.24:
+    if hopCount <= 5.50:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.24:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 4.50:
+    if Inter-packet Time <= 0.22:
+    Drop DDOS
+else:
+    Drop External Spoofing
+else:
+    if hopCount <= 6.50:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 4.50:
+    if hopCount <= 4.00:
+    # Do nothing, go to next
+else:
+    if hopCount <= 6.50:
+    if Inter-packet Time <= 0.29:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.54:
+    if Prefix Inter-packet Time <= 0.30:
+    if New Addresses Seen <= 5.50:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 48.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 3.50:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 2.60:
+    if Inter-packet Time <= 2.48:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.24:
+    if Prefix Inter-packet Time <= 0.22:
+    if New Addresses Seen <= 15.50:
+    if Inter-packet Time <= 0.21:
+    if Inter-packet Time <= 0.20:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.20:
+    if Inter-packet Time <= 0.20:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.20:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 9.50:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.21:
+    if Source <= 59.50:
+    Drop DDOS
+else:
+    if Source <= 82.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.21:
+    # Do nothing, go to next
+else:
+    if New Addresses Seen <= 12.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Source <= 52.50:
+    if New Addresses Seen <= 7.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.22:
+    if Inter-packet Time <= 0.21:
+    if hopCount <= 6.00:
+    Drop DDOS
+else:
+    if Source <= 98.00:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.21:
+    if Prefix Inter-packet Time <= 0.19:
+    if Inter-packet Time <= 0.19:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if hopCount <= 4.50:
+    if Source <= 41.50:
+    if Source <= 39.50:
+    Drop DDOS
+else:
+    if hopCount <= 3.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.21:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.21:
+    if hopCount <= 3.50:
+    if Inter-packet Time <= 0.21:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 79.50:
+    Drop DDOS
+else:
+    if Source <= 85.00:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.22:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.22:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 18.50:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 19.50:
+    if Source <= 77.50:
+    if hopCount <= 4.50:
+    if Source <= 41.50:
+    if New Addresses Seen <= 17.50:
+    if Source <= 24.50:
+    # Do nothing, go to next
+else:
+    if Source <= 37.00:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Prefix Inter-packet Time <= 0.23:
+    if Source <= 38.00:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if hopCount <= 5.50:
+    if Source <= 57.50:
+    Drop DDOS
+else:
+    if Source <= 61.50:
+    if New Addresses Seen <= 16.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    if hopCount <= 5.50:
+    Drop DDOS
+else:
+    if Source <= 102.00:
+    if Source <= 81.50:
+    if hopCount <= 6.50:
+    if Prefix Inter-packet Time <= 0.23:
+    # Do nothing, go to next
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 98.00:
+    Drop DDOS
+else:
+    if hopCount <= 6.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 62.00:
+    if Source <= 57.50:
+    if Inter-packet Time <= 0.24:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.24:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 4.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 7.50:
+    if Inter-packet Time <= 2.83:
+    if Inter-packet Time <= 0.45:
+    if hopCount <= 4.50:
+    if Source <= 28.00:
+    # Do nothing, go to next
+else:
+    if hopCount <= 3.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Inter-packet Time <= 0.37:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.42:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Prefix Inter-packet Time <= 0.27:
+    if Source <= 98.50:
+    if New Addresses Seen <= 15.50:
+    if New Addresses Seen <= 14.50:
+    if Source <= 78.00:
+    if hopCount <= 3.50:
+    # Do nothing, go to next
+else:
+    if hopCount <= 4.50:
+    if Inter-packet Time <= 0.27:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 80.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.26:
+    if Inter-packet Time <= 0.25:
+    if Source <= 68.50:
+    if Prefix Inter-packet Time <= 0.25:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    if Source <= 21.00:
+    if hopCount <= 3.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 58.50:
+    Drop DDOS
+else:
+    if Source <= 61.50:
+    if New Addresses Seen <= 19.50:
+    Drop DDOS
+else:
+    if hopCount <= 4.50:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 6.50:
+    Drop DDOS
+else:
+    if Source <= 102.50:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if New Addresses Seen <= 8.50:
+    if Inter-packet Time <= 1.76:
+    if Source <= 55.00:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if hopCount <= 4.50:
+    if Source <= 39.50:
+    if Source <= 38.50:
+    if New Addresses Seen <= 11.00:
+    if Prefix Inter-packet Time <= 4.18:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Inter-packet Time <= 0.31:
+    if Prefix Inter-packet Time <= 0.31:
+    if Source <= 79.50:
+    Drop DDOS
+else:
+    if Source <= 80.50:
+    if Inter-packet Time <= 0.30:
+    # Do nothing, go to next
+else:
+    Drop DDOS
+else:
+    if Source <= 98.50:
+    Drop DDOS
+else:
+    Drop DDOS
+else:
+    # Do nothing, go to next
+else:
+    Drop DDOS

@@ -1,0 +1,1441 @@
+/* -*- P4_16 -*- */
+#include <core.p4>
+#include <v1model.p4>
+
+/*************************************************************************
+*********************** P A R A M E T E R S  *****************************
+*************************************************************************/
+
+#define BUCKET_COUNT 1024 // number of buckets in the hash table
+#define PACKET_COUNT_TO_RESET_COUNTER 100 // number of packets to reset the new addresses seen counter
+#define FLOW_TIME_WINDOW_SIZE 5000000 // the size of the time window for flow time window packet counter (5 seconds)
+#define PREFIX_TIME_WINDOW_SIZE 5000000 // the size of the time window for prefix time window packet counter (5 seconds)
+
+typedef bit<16> drop_counter_t; // drop counter type (16-bit)
+typedef bit<48> timestamp_t; // timestamp type (48-bit)
+typedef bit<32> counter_t; // counter type (32-bit)
+typedef bit<32> hash_t; // hash type (32-bit)
+typedef bit<32> hash_input_t; // hash input type (32-bit)
+typedef bit<16> duration_t; // duration type (16-bit)
+typedef bit<32> index_t; // index type (32-bit)
+typedef bit<26> iteration_no_t; // iteration number type (24-bit)
+typedef int<48> s_duration_t; // signed duration type (32-bit)
+typedef bit<32> protocol_t; // protocol type (1-bit)
+
+#define TYPE_IPV6 0x86DD
+#define TYPE_IPV4 0x0800
+#define TYPE_ICMPV6 0x3A
+#define TYPE_ICMPV6_NS 0x87
+#define TYPE_TCP 0x06
+
+/*************************************************************************
+*********************** H E A D E R S  ***********************************
+*************************************************************************/
+
+typedef bit<9>  egressSpec_t;
+typedef bit<48> macAddr_t;
+typedef bit<128> ip6Addr_t;
+typedef bit<32> ip4Addr_t;
+
+header ethernet_t {
+    macAddr_t dstAddr;
+    macAddr_t srcAddr;
+    bit<16>   etherType;
+}
+
+header ipv6_t {
+    bit<4> version;
+    bit<8> trafficClass;
+    bit<20> flowLabel;
+    bit<16> payloadLen;
+    bit<8> nextHdr;
+    bit<8> hopLimit;
+    ip6Addr_t srcAddr;
+    ip6Addr_t dstAddr;
+}
+
+header icmpv6_t {
+    bit<8> type;
+    bit<8> code;
+    bit<16> checksum;
+    bit<32> body;
+}
+
+header icmpv6_ns_t {
+    ip6Addr_t targetAddress;
+}
+
+header tcp_t {
+    bit<16> srcPort;
+    bit<16> dstPort;
+    bit<32> seqNo;
+    bit<32> ackNo;
+    bit<4> dataOffset;
+    bit<6> reserved;
+    bit<6> flags;
+    bit<16> window;
+    bit<16> checksum;
+    bit<16> urgentPtr;
+}
+
+header tcp_option_end_t {
+    bit<8> kind;
+}
+
+header tcp_option_ts_t {
+    bit<8> kind;
+    bit<8> length;
+    bit<32> tsVal;
+    bit<32> tsEcr;
+}
+
+header tcp_option_padding_t {
+    bit<8> padding;
+}
+
+struct network_t {
+    ip6Addr_t network_addr;
+    bit<8> prefix_len;
+}
+
+struct current_counter_entry_t {
+    index_t index;
+    bool valid;
+}
+
+struct metadata {
+    bool should_drop;
+    network_t current_network;
+    current_counter_entry_t current_counter_entry;
+    timestamp_t prefix_inter_packet_time;
+    timestamp_t inter_packet_time;
+    bit<128> src_addr;
+}
+
+struct headers {
+    ethernet_t   ethernet;
+    ipv6_t ipv6;
+    icmpv6_t icmpv6;
+    icmpv6_ns_t icmpv6_ns;
+    tcp_t tcp;
+    tcp_option_end_t tcp_option_end;
+    tcp_option_ts_t tcp_option_ts;
+    tcp_option_padding_t tcp_option_padding;
+}
+
+/*************************************************************************
+*********************** P A R S E R  ***********************************
+*************************************************************************/
+
+parser MyParser(packet_in packet,
+                out headers hdr,
+                inout metadata meta,
+                inout standard_metadata_t standard_metadata) {
+
+    state start {
+        transition parse_ethernet;
+    }
+
+    state parse_ethernet {
+        packet.extract(hdr.ethernet);
+        transition select(hdr.ethernet.etherType) {
+            TYPE_IPV6 : parse_ipv6;
+            default : accept;
+        }
+    }
+
+    state parse_ipv6 {
+        packet.extract(hdr.ipv6);
+        transition select(hdr.ipv6.nextHdr) {
+            TYPE_ICMPV6 : parse_icmpv6;
+            TYPE_TCP : parse_tcp;
+            default : accept;
+        }
+    }
+
+    state parse_icmpv6 {
+        packet.extract(hdr.icmpv6);
+        transition select(hdr.icmpv6.type) {
+            TYPE_ICMPV6_NS : parse_icmpv6_ns;
+            default : accept;
+        }
+    }
+
+    state parse_icmpv6_ns {
+        packet.extract(hdr.icmpv6_ns);
+        transition accept;
+    }
+
+    // Note: this parser only parses the TCP header and the options that are used in the experiments
+    // it will not work in production environments
+    state parse_tcp {
+        packet.extract(hdr.tcp);
+        packet.extract(hdr.tcp_option_ts);
+        packet.extract(hdr.tcp_option_end);
+        packet.extract(hdr.tcp_option_padding);
+        transition accept;
+    }
+}
+
+
+/*************************************************************************
+************   C H E C K S U M    V E R I F I C A T I O N   *************
+*************************************************************************/
+
+control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
+    apply {  }
+}
+
+
+/*************************************************************************
+**************  I N G R E S S   P R O C E S S I N G   *******************
+*************************************************************************/
+
+//// Registers for the experiment
+
+// drop counters:
+// Index	Label			                Actual Type
+// 0	    External Spoofing		        TCP benign (tcp tsval 1000)
+// 1	    External Spoofing		        TCP attack (other tcp)
+// 2	    External Spoofing		        NS (all NS)
+
+// 3	    Internal Spoofing 		        TCP benign (tcp tsval 1000)
+// 4	    Internal Spoofing 		        TCP attack (other tcp)
+// 5	    Internal Spoofing		        NS (all NS)
+
+// 6	    External Flooding		        TCP benign (tcp tsval 1000)
+// 7	    External Flooding		        TCP attack (other tcp)
+// 8	    External Flooding		        NS (all NS)
+
+// 9	    Internal Flooding		        TCP benign (tcp tsval 1000)
+// 10	    Internal Flooding		        TCP attack (other tcp)
+// 11	    Internal Flooding		        NS (all NS)
+
+// 12	    External Flooding + Spoofing	TCP benign (tcp tsval 1000)
+// 13	    External Flooding + Spoofing	TCP attack (other tcp)
+// 14	    External Flooding + Spoofing	NS (all NS)
+register<drop_counter_t>(15) drop_counter_reg;
+
+register<duration_t>(85000) ingress_packet_processing_durations_reg;
+register<index_t>(1) last_duration_index_reg;
+
+register<timestamp_t>(85000) flow_inter_packet_times_reg;
+register<index_t>(1) last_flow_inter_packet_time_index_reg;
+
+register<timestamp_t>(85000) prefix_inter_packet_times_reg;
+register<index_t>(1) last_prefix_inter_packet_time_index_reg;
+
+register<bit<128>>(85000) src_addr_reg;
+register<index_t>(1) last_src_addr_index_reg;
+
+register<bit<128>>(85000) packet_ids_reg;
+register<index_t>(1) last_packet_id_index_reg;
+
+register<bit<128>>(1020000) metadata_reg;
+register<index_t>(1) last_metadata_index_reg;
+
+register<bit<256>>(30) test;
+
+//// Registers for features
+// register<timestamp_t>(BUCKET_COUNT) flow_timestamp1;
+// register<timestamp_t>(BUCKET_COUNT) flow_timestamp2;
+// register<timestamp_t>(BUCKET_COUNT) flow_timestamp3;
+
+// register<timestamp_t>(BUCKET_COUNT) prefix_timestamp1;
+// register<timestamp_t>(BUCKET_COUNT) prefix_timestamp2;
+// register<timestamp_t>(BUCKET_COUNT) prefix_timestamp3;
+
+register<timestamp_t>(BUCKET_COUNT) flow_window_start_time1;
+register<timestamp_t>(BUCKET_COUNT) flow_window_start_time2;
+register<timestamp_t>(BUCKET_COUNT) flow_window_start_time3;
+
+register<timestamp_t>(BUCKET_COUNT) prefix_window_start_time1;
+register<timestamp_t>(BUCKET_COUNT) prefix_window_start_time2;
+register<timestamp_t>(BUCKET_COUNT) prefix_window_start_time3;
+
+register<counter_t>(BUCKET_COUNT) flow_window_packet_counter1;
+register<counter_t>(BUCKET_COUNT) flow_window_packet_counter2;
+register<counter_t>(BUCKET_COUNT) flow_window_packet_counter3;
+
+register<counter_t>(BUCKET_COUNT) prefix_window_packet_counter1;
+register<counter_t>(BUCKET_COUNT) prefix_window_packet_counter2;
+register<counter_t>(BUCKET_COUNT) prefix_window_packet_counter3;
+
+register<bit<1>>(BUCKET_COUNT) flow_first_window_set; // Indicates if the first time window for a flow has been set (1 if set, 0 if not)
+register<bit<1>>(BUCKET_COUNT) prefix_first_window_set; // Indicates if the first time window for a prefix has been set (1 if set, 0 if not)
+
+register<counter_t>(256) new_addresses_seen_counters; // a counter for how many new addresses were seen in each prefix (each entry is a prefix)
+register<counter_t>(256) prefix_packet_counter; // a counter for how many packets were seen in each prefix (each entry is a prefix)
+register<iteration_no_t>(256) prefix_last_iteration_no; // the last iteration number that was seen in the prefix (each entry is a prefix)
+
+//// Registers storing the last iteration number that the source address was seen in each prefix
+// iteration numbers for the first prefix (prefix with counter index 0)
+register<iteration_no_t>(BUCKET_COUNT) prefix1_iterations_reg1; 
+register<iteration_no_t>(BUCKET_COUNT) prefix1_iterations_reg2;
+register<iteration_no_t>(BUCKET_COUNT) prefix1_iterations_reg3;
+
+// iteration numbers for the second prefix (prefix with counter index 1)
+register<iteration_no_t>(BUCKET_COUNT) prefix2_iterations_reg1;
+register<iteration_no_t>(BUCKET_COUNT) prefix2_iterations_reg2;
+register<iteration_no_t>(BUCKET_COUNT) prefix2_iterations_reg3;
+
+// iteration numbers for the third prefix (prefix with counter index 2)
+register<iteration_no_t>(BUCKET_COUNT) prefix3_iterations_reg1;
+register<iteration_no_t>(BUCKET_COUNT) prefix3_iterations_reg2;
+register<iteration_no_t>(BUCKET_COUNT) prefix3_iterations_reg3;
+
+// iteration numbers for the fourth prefix (prefix with counter index 3)
+register<iteration_no_t>(BUCKET_COUNT) prefix4_iterations_reg1;
+register<iteration_no_t>(BUCKET_COUNT) prefix4_iterations_reg2;
+register<iteration_no_t>(BUCKET_COUNT) prefix4_iterations_reg3;
+
+// iteration numbers for the fifth prefix (prefix with counter index 4)
+register<iteration_no_t>(BUCKET_COUNT) prefix5_iterations_reg1;
+register<iteration_no_t>(BUCKET_COUNT) prefix5_iterations_reg2;
+register<iteration_no_t>(BUCKET_COUNT) prefix5_iterations_reg3;
+
+// iteration numbers for the sixth prefix (prefix with counter index 5)
+register<iteration_no_t>(BUCKET_COUNT) prefix6_iterations_reg1;
+register<iteration_no_t>(BUCKET_COUNT) prefix6_iterations_reg2;
+register<iteration_no_t>(BUCKET_COUNT) prefix6_iterations_reg3;
+
+//// Note: the experiment only has 6 prefixes, so the registers for the other prefixes are not defined.
+//// In production, the iteration number registers must be created using a script that generates the P4 code snippet.
+
+control MyIngress(inout headers hdr,
+                  inout metadata meta,
+                  inout standard_metadata_t standard_metadata) {
+    /*************************************** Forwarding ****************************************/
+    action multicast() {
+        standard_metadata.mcast_grp = 1;
+        hdr.ipv6.hopLimit = hdr.ipv6.hopLimit - 1;
+    }
+
+    action mac_forward(egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+        hdr.ipv6.hopLimit = hdr.ipv6.hopLimit - 1;
+    }
+
+    table mac_lookup {
+        key = {
+            hdr.ethernet.dstAddr : exact;
+        }
+        actions = {
+            multicast;
+            mac_forward;
+        }
+        size = 1024;
+        default_action = multicast;
+    }
+
+    /**************************** Feature Extraction Helper Functions *****************************/
+    // action update_flow_timestamps(in hash_t hash1, in hash_t hash2, in hash_t hash3, in timestamp_t current_time) {
+    //     flow_timestamp1.write(hash1, current_time);
+    //     flow_timestamp2.write(hash2, current_time);
+    //     flow_timestamp3.write(hash3, current_time);
+    // }
+
+    // action update_prefix_timestamps(in hash_t hash1, in hash_t hash2, in hash_t hash3, in timestamp_t current_time) {
+    //     prefix_timestamp1.write(hash1, current_time);
+    //     prefix_timestamp2.write(hash2, current_time);
+    //     prefix_timestamp3.write(hash3, current_time);
+    // }
+
+    // Jenkins One-at-a-Time hash function
+    action jenkins_hash(in bit<32> key, out bit<32> hash_result) {
+        // Split the 32-bit key into four 8-bit chunks
+        // the bytes are 32 bits long to add them to the hash_result
+        // (both need to be the same size)
+        bit<32> byte0 = key & 0xFF;
+        bit<32> byte1 = (key >> 8) & 0xFF;
+        bit<32> byte2 = (key >> 16) & 0xFF;
+        bit<32> byte3 = (key >> 24) & 0xFF;
+
+        // Initialize hash to zero
+        hash_result = 0;
+
+        // Process each byte, following the JOAT steps
+        hash_result = hash_result + byte0;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        hash_result = hash_result + byte1;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        hash_result = hash_result + byte2;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        hash_result = hash_result + byte3;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        // Final mixing steps
+        hash_result = hash_result + (hash_result << 3);
+        hash_result = hash_result ^ (hash_result >> 11);
+        hash_result = hash_result + (hash_result << 15);
+
+        // Make it within bucket size
+        hash_result = hash_result % BUCKET_COUNT;
+    }
+
+    action get_hash_inputs_prefix(in bit<128> network_addr, in bit<8> prefix_len, out bit<32> input1, out bit<32> input2, out bit<32> input3) {
+        bit<32> chunk1 = (bit<32>)network_addr; // first (rightmost) 32 bits of network_addr
+        bit<32> chunk2 = (bit<32>)(network_addr >> 32); // the next 32 bits of network_addr
+        bit<32> chunk3 = (bit<32>)(network_addr >> 64); // the next 32 bits of network_addr
+        bit<32> chunk4 = (bit<32>)(network_addr >> 96); // the last (leftmost) 32 bits of network_addr
+
+        input1 = chunk1 ^ chunk2 ^ chunk3 ^ chunk4 ^ ((bit<32>)prefix_len << 8);
+        input2 = chunk2 ^ chunk3 ^ chunk4 ^ ((bit<32>)prefix_len << 16);
+        input3 = chunk3 ^ chunk4 ^ chunk1 ^ ((bit<32>)prefix_len << 24);
+    }
+
+    action get_hash_inputs_flow(in bit<128> src_addr, in bit<128> dst_addr, out bit<32> input1, out bit<32> input2, out bit<32> input3) {
+        bit<32> chunk1 = (bit<32>)src_addr; // first (rightmost) 32 bits of src_addr
+        bit<32> chunk2 = (bit<32>)(src_addr >> 32); // the next 32 bits of src_addr
+        bit<32> chunk3 = (bit<32>)(src_addr >> 64); // the next 32 bits of src_addr
+        bit<32> chunk4 = (bit<32>)(src_addr >> 96); // the last (leftmost) 32 bits of src_addr
+        bit<32> chunk5 = (bit<32>)(dst_addr); // first (rightmost) 32 bits of dst_addr
+        bit<32> chunk6 = (bit<32>)(dst_addr >> 32); // the next 32 bits of dst_addr
+        bit<32> chunk7 = (bit<32>)(dst_addr >> 64); // the next 32 bits of dst_addr
+        bit<32> chunk8 = (bit<32>)(dst_addr >> 96); // the last (leftmost) 32 bits of dst_addr
+
+        input1 = chunk1 ^ chunk2 ^ chunk3 ^ chunk4 ^ chunk5 ^ chunk6 ^ chunk7 ^ chunk8;
+        input2 = chunk2 ^ chunk3 ^ chunk4 ^ chunk5 ^ chunk6;
+        input3 = chunk5 ^ chunk6 ^ chunk7 ^ chunk8 ^ chunk1;
+    }
+
+    action get_hash_inputs_addr(in bit<128> src_addr, out bit<32> input1, out bit<32> input2, out bit<32> input3) {
+        bit<32> chunk1 = (bit<32>)src_addr; // first (rightmost) 32 bits of src_addr
+        bit<32> chunk2 = (bit<32>)(src_addr >> 32); // the next 32 bits of src_addr
+        bit<32> chunk3 = (bit<32>)(src_addr >> 64); // the next 32 bits of src_addr
+        bit<32> chunk4 = (bit<32>)(src_addr >> 96); // the last (leftmost) 32 bits of src_addr
+
+        input1 = chunk1 ^ chunk2 ^ chunk3 ^ chunk4;
+        input2 = chunk2 ^ chunk3 ^ chunk4;
+        input3 = chunk3 ^ chunk4 ^ chunk1;
+    }
+
+    action extract_network(ip6Addr_t network_addr, bit<8> prefix_len) {
+        meta.current_network.network_addr = network_addr;
+        meta.current_network.prefix_len = prefix_len;
+    }
+
+    table existing_networks {
+        key = {
+            hdr.ipv6.srcAddr: lpm;
+        }
+        actions = {
+            extract_network;
+            NoAction;
+        }
+        size = 256;
+        default_action = NoAction;
+    }
+
+    action set_counter_index(index_t index) {
+        meta.current_counter_entry.index = index;
+        meta.current_counter_entry.valid = true;
+    }
+
+    action set_invalid_counter_index() {
+        meta.current_counter_entry.index = 0;
+        meta.current_counter_entry.valid = false;
+    }
+
+    table counter_index {
+        key = {
+            hdr.ipv6.srcAddr: lpm;
+        }
+        actions = {
+            set_counter_index;
+            set_invalid_counter_index;
+        }
+        size = 256;
+        default_action = set_invalid_counter_index;
+    }
+
+    /************************* Experiment Helper Functions *************************/
+
+    action external_spoofing_tcp_benign_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)0);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)0, drop_counter_value);
+    }
+
+    action external_spoofing_tcp_attack_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)1);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)1, drop_counter_value);
+    }
+
+    action external_spoofing_ns_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)2);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)2, drop_counter_value);
+    }
+
+    action internal_spoofing_tcp_benign_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)3);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)3, drop_counter_value);
+    }
+
+    action internal_spoofing_tcp_attack_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)4);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)4, drop_counter_value);
+    }
+
+    action internal_spoofing_ns_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)5);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)5, drop_counter_value);
+    }
+
+    action external_flooding_tcp_benign_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)6);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)6, drop_counter_value);
+    }
+
+    action external_flooding_tcp_attack_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)7);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)7, drop_counter_value);
+    }
+
+    action external_flooding_ns_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)8);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)8, drop_counter_value);
+    }
+
+    action internal_flooding_tcp_benign_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)9);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)9, drop_counter_value);
+    }
+
+    action internal_flooding_tcp_attack_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)10);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)10, drop_counter_value);
+    }
+
+    action internal_flooding_ns_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)11);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)11, drop_counter_value);
+    }
+
+    action external_flooding_spoofing_tcp_benign_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)12);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)12, drop_counter_value);
+    }
+
+    action external_flooding_spoofing_tcp_attack_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)13);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)13, drop_counter_value);
+    }
+
+    action external_flooding_spoofing_ns_drop() {
+        // simulate the drop action by sending to port 200
+        standard_metadata.egress_spec = 200;
+        // mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+        drop_counter_t drop_counter_value;
+        drop_counter_reg.read(drop_counter_value, (bit<32>)14);
+        drop_counter_value = drop_counter_value + 1;
+        drop_counter_reg.write((bit<32>)14, drop_counter_value);
+    }
+
+    apply {
+        // drop any packet that does not start with 2001 as it is not part of the experiment
+        if (hdr.ipv6.isValid() && (bit<16>)(hdr.ipv6.srcAddr >> 112) != 0x2001) {
+            // Mark the packet for drop and exit the processing pipeline
+            mark_to_drop(standard_metadata);
+            return;
+        }
+
+        // forward the packet if it comes from the victim
+        // the victim's source address does not have an encoded value
+        if (hdr.ipv6.isValid() && hdr.ipv6.srcAddr == 0x20010db8000100000000000000000001) {
+            mac_lookup.apply();
+            return;
+        }
+
+        meta.should_drop = false;
+        
+        if (hdr.ipv6.isValid()) {
+            /************************************ Setting Header Values ************************************/
+            bit<32> port;
+            // if port is external, i.e., ingress port <= 5, then port is 0
+            if (standard_metadata.ingress_port <= 5) {
+                port = 0;
+            }
+            else { // otherwise, port is ingress port
+                port = (bit<32>)standard_metadata.ingress_port;
+            }
+            ip6Addr_t src_ipv6_addr = hdr.ipv6.srcAddr;
+            protocol_t protocol;
+
+
+            /************************************* Feature Extraction *************************************/
+            // initialize the features
+            bit<32> hop_count;
+            timestamp_t prefix_inter_packet_time;
+            timestamp_t inter_packet_time;
+            counter_t new_addresses_seen;
+
+            // initialize the hash related variables
+            hash_input_t hash_input1;
+            hash_input_t hash_input2;
+            hash_input_t hash_input3;
+
+            hash_t hash1;
+            hash_t hash2;
+            hash_t hash3;
+
+            // initialize the timestamp related variables
+            timestamp_t current_time = standard_metadata.ingress_global_timestamp;
+
+            timestamp_t flow_last_time1;
+            timestamp_t flow_last_time2;
+            timestamp_t flow_last_time3;
+
+            timestamp_t prefix_last_time1;
+            timestamp_t prefix_last_time2;
+            timestamp_t prefix_last_time3;
+
+            counter_t flow_window_packet_count;
+
+            counter_t prefix_window_packet_count;
+
+            /******* Extracting hop count *******/
+            // set the hop count based on the packet type
+            // we add 1 to the hop count because the calculation is based on the remaining hops
+            if (hdr.ipv6.nextHdr == TYPE_ICMPV6) {
+                hop_count = (bit<32>)(255 - hdr.ipv6.hopLimit + 1);
+            }
+            else {
+                hop_count = (bit<32>)(64 - hdr.ipv6.hopLimit + 1);
+            }
+
+
+            // /******* Extracting prefix inter-packet time *******/
+            // extract the network address and prefix length
+            existing_networks.apply(); // set the current_network metadata
+
+            // // get the hash inputs for the prefix then get the hash values
+            // get_hash_inputs_prefix(meta.current_network.network_addr, meta.current_network.prefix_len, hash_input1, hash_input2, hash_input3);
+
+            // jenkins_hash(hash_input1, hash1);
+            // jenkins_hash(hash_input2, hash2);
+            // jenkins_hash(hash_input3, hash3);
+
+            // // get the last time for the prefix
+            // prefix_timestamp1.read(prefix_last_time1, hash1);
+            // prefix_timestamp2.read(prefix_last_time2, hash2);
+            // prefix_timestamp3.read(prefix_last_time3, hash3);
+
+            // // write the prefix hashes to the test register
+            // test.write(23, (bit<256>)hash1);
+            // test.write(24, (bit<256>)hash2);
+            // test.write(25, (bit<256>)hash3);
+
+            // // write the prefix last times to the test register
+            // test.write(8, (bit<256>)prefix_last_time1);
+            // test.write(9, (bit<256>)prefix_last_time2);
+            // test.write(10, (bit<256>)prefix_last_time3);
+            
+            // // calculate the prefix inter-packet times
+            // // if the prefix is new, i.e., the last time is 0, then the inter-packet time is 0
+            // timestamp_t prefix_inter_packet_time1;
+            // timestamp_t prefix_inter_packet_time2;
+            // timestamp_t prefix_inter_packet_time3;
+            // if (prefix_last_time1 == 0) {
+            //     prefix_inter_packet_time1 = 0;
+            // }
+            // else {
+            //     prefix_inter_packet_time1 = current_time - prefix_last_time1;
+            // }
+            // if (prefix_last_time2 == 0) {
+            //     prefix_inter_packet_time2 = 0;
+            // }
+            // else {
+            //     prefix_inter_packet_time2 = current_time - prefix_last_time2;
+            // }
+            // if (prefix_last_time3 == 0) {
+            //     prefix_inter_packet_time3 = 0;
+            // }
+            // else {
+            //     prefix_inter_packet_time3 = current_time - prefix_last_time3;
+            // }
+
+            // // write the inter-packet times to the test register
+            // test.write(14, (bit<256>)prefix_inter_packet_time1);
+            // test.write(15, (bit<256>)prefix_inter_packet_time2);
+            // test.write(16, (bit<256>)prefix_inter_packet_time3);
+
+            // // get the maximum of the three prefix inter-packet times using ternary operators
+            // // prefix_inter_packet_time = (inter_packet_time1 > inter_packet_time2) ? (inter_packet_time1 > inter_packet_time3 ? inter_packet_time1 : inter_packet_time3) : (inter_packet_time2 > inter_packet_time3 ? inter_packet_time2 : inter_packet_time3);
+
+            // // set the metadata
+            // // meta.prefix_inter_packet_time = prefix_inter_packet_time;
+
+            // // update the timestamps
+            // update_prefix_timestamps(hash1, hash2, hash3, current_time);
+
+
+            // /******* Extracting inter-packet time *******/
+            // // get the hash inputs for the flow then get the hash values
+            // get_hash_inputs_flow(hdr.ipv6.srcAddr, hdr.ipv6.dstAddr, hash_input1, hash_input2, hash_input3);
+
+            // jenkins_hash(hash_input1, hash1);
+            // jenkins_hash(hash_input2, hash2);
+            // jenkins_hash(hash_input3, hash3);
+
+            // // get the last time for the flow
+            // flow_timestamp1.read(flow_last_time1, hash1);
+            // flow_timestamp2.read(flow_last_time2, hash2);
+            // flow_timestamp3.read(flow_last_time3, hash3);
+
+            // // write the flow hashes to the test register
+            // test.write(20, (bit<256>)hash1);
+            // test.write(21, (bit<256>)hash2);
+            // test.write(22, (bit<256>)hash3);
+
+            // // write the flow last times to the test register
+            // test.write(11, (bit<256>)flow_last_time1);
+            // test.write(12, (bit<256>)flow_last_time2);
+            // test.write(13, (bit<256>)flow_last_time3);
+            
+            // // calculate the inter-packet times
+            // // if the flow is new, i.e., the last time is 0, then the inter-packet time is 0
+            // timestamp_t flow_inter_packet_time1;
+            // timestamp_t flow_inter_packet_time2;
+            // timestamp_t flow_inter_packet_time3;
+            // if (flow_last_time1 == 0) {
+            //     flow_inter_packet_time1 = 0;
+            // }
+            // else {
+            //     flow_inter_packet_time1 = current_time - flow_last_time1;
+            // }
+            // if (flow_last_time2 == 0) {
+            //     flow_inter_packet_time2 = 0;
+            // }
+            // else {
+            //     flow_inter_packet_time2 = current_time - flow_last_time2;
+            // }
+            // if (flow_last_time3 == 0) {
+            //     flow_inter_packet_time3 = 0;
+            // }
+            // else {
+            //     flow_inter_packet_time3 = current_time - flow_last_time3;
+            // }
+
+            // // write the inter-packet times to the test register
+            // test.write(17, (bit<256>)flow_inter_packet_time1);
+            // test.write(18, (bit<256>)flow_inter_packet_time2);
+            // test.write(19, (bit<256>)flow_inter_packet_time3);
+
+            // // get the maximum of the three inter-packet times using ternary operators
+            // // inter_packet_time = (inter_packet_time1 > inter_packet_time2) ? (inter_packet_time1 > inter_packet_time3 ? inter_packet_time1 : inter_packet_time3) : (inter_packet_time2 > inter_packet_time3 ? inter_packet_time2 : inter_packet_time3);
+
+            // // set the metadata
+            // // meta.inter_packet_time = inter_packet_time;
+
+            // // update the timestamps
+            // update_flow_timestamps(hash1, hash2, hash3, current_time);
+
+
+
+            /******* Extracting new addresses seen *******/
+            // if internal port, i.e., port != 0, then new addresses seen is 0
+            if (port != 0) {
+                new_addresses_seen = 0;
+            }
+            else {
+                // get the hash inputs for the address then get the hash values
+                get_hash_inputs_addr(hdr.ipv6.srcAddr, hash_input1, hash_input2, hash_input3);
+
+                jenkins_hash(hash_input1, hash1);
+                jenkins_hash(hash_input2, hash2);
+                jenkins_hash(hash_input3, hash3);
+
+                // get the index for the new addresses seen counter and the prefix packet counter
+                counter_index.apply(); // set the current_counter_entry metadata
+
+                // check if the current counter entry is valid
+                counter_t new_addresses_seen_counter_value;
+                counter_t prefix_packet_counter_value;
+                iteration_no_t prefix_last_iteration_no_value;
+                if (meta.current_counter_entry.valid) {
+                    // read the new addresses seen counter and the prefix packet counter
+                    new_addresses_seen_counters.read(new_addresses_seen_counter_value, meta.current_counter_entry.index);
+                    prefix_packet_counter.read(prefix_packet_counter_value, meta.current_counter_entry.index);
+                    prefix_last_iteration_no.read(prefix_last_iteration_no_value, meta.current_counter_entry.index);
+
+                    // increment the prefix packet counter
+                    prefix_packet_counter_value = prefix_packet_counter_value + 1;
+                    prefix_packet_counter.write(meta.current_counter_entry.index, prefix_packet_counter_value);
+
+                    //// check if this source address is new
+                    // calculate the current iteration number
+                    // Note: x * 163 >> 14 is an approximation of x // 100
+                    iteration_no_t current_iteration_no = (iteration_no_t)(((prefix_packet_counter_value * 163) >> 14) + 1);
+
+                    iteration_no_t prefix_iterations1 = 0;
+                    iteration_no_t prefix_iterations2 = 0;
+                    iteration_no_t prefix_iterations3 = 0;
+
+                    // get the iteration number registers for the current prefix then read the values corresponding to the hash values
+                    // Note: In production, the following if statements should be generated using a script that generates the P4 code snippet
+                    if (meta.current_counter_entry.index == 0) {
+                        prefix1_iterations_reg1.read(prefix_iterations1, hash1);
+                        prefix1_iterations_reg2.read(prefix_iterations2, hash2);
+                        prefix1_iterations_reg3.read(prefix_iterations3, hash3);
+                    }
+                    else if (meta.current_counter_entry.index == 1) {
+                        prefix2_iterations_reg1.read(prefix_iterations1, hash1);
+                        prefix2_iterations_reg2.read(prefix_iterations2, hash2);
+                        prefix2_iterations_reg3.read(prefix_iterations3, hash3);
+                    }
+                    else if (meta.current_counter_entry.index == 2) {
+                        prefix3_iterations_reg1.read(prefix_iterations1, hash1);
+                        prefix3_iterations_reg2.read(prefix_iterations2, hash2);
+                        prefix3_iterations_reg3.read(prefix_iterations3, hash3);
+                    }
+                    else if (meta.current_counter_entry.index == 3) {
+                        prefix4_iterations_reg1.read(prefix_iterations1, hash1);
+                        prefix4_iterations_reg2.read(prefix_iterations2, hash2);
+                        prefix4_iterations_reg3.read(prefix_iterations3, hash3);
+                    }
+                    else if (meta.current_counter_entry.index == 4) {
+                        prefix5_iterations_reg1.read(prefix_iterations1, hash1);
+                        prefix5_iterations_reg2.read(prefix_iterations2, hash2);
+                        prefix5_iterations_reg3.read(prefix_iterations3, hash3);
+                    }
+                    else if (meta.current_counter_entry.index == 5) {
+                        prefix6_iterations_reg1.read(prefix_iterations1, hash1);
+                        prefix6_iterations_reg2.read(prefix_iterations2, hash2);
+                        prefix6_iterations_reg3.read(prefix_iterations3, hash3);
+                    }
+
+                    //// check if the current iteration number is different from the stored iteration number, i.e., check if this address is new
+                    // get the minimum stored iteration number
+                    iteration_no_t min_iteration_no = (prefix_iterations1 < prefix_iterations2) ? (prefix_iterations1 < prefix_iterations3 ? prefix_iterations1 : prefix_iterations3) : (prefix_iterations2 < prefix_iterations3 ? prefix_iterations2 : prefix_iterations3);
+
+
+                    // if the current iteration number is the same as the stored iteration number, then this address is not new (for this iteration)
+                    // otherwise, increment the new addresses seen counter and update the iteration number registers
+                    if (current_iteration_no > min_iteration_no) {
+                        new_addresses_seen = new_addresses_seen_counter_value + 1;
+                        new_addresses_seen_counters.write(meta.current_counter_entry.index, new_addresses_seen);
+
+                        // write current and min iteration number into the test reg
+                        test.write(6, (bit<256>)current_iteration_no);
+                        test.write(7, (bit<256>)min_iteration_no);
+
+
+                        // update the iteration number registers
+                        // Note: In production, the following if statements should be generated using a script that generates the P4 code snippet
+                        if (meta.current_counter_entry.index == 0) {
+                            prefix1_iterations_reg1.write(hash1, current_iteration_no);
+                            prefix1_iterations_reg2.write(hash2, current_iteration_no);
+                            prefix1_iterations_reg3.write(hash3, current_iteration_no);
+                        }
+                        else if (meta.current_counter_entry.index == 1) {
+                            prefix2_iterations_reg1.write(hash1, current_iteration_no);
+                            prefix2_iterations_reg2.write(hash2, current_iteration_no);
+                            prefix2_iterations_reg3.write(hash3, current_iteration_no);
+                        }
+                        else if (meta.current_counter_entry.index == 2) {
+                            prefix3_iterations_reg1.write(hash1, current_iteration_no);
+                            prefix3_iterations_reg2.write(hash2, current_iteration_no);
+                            prefix3_iterations_reg3.write(hash3, current_iteration_no);
+                        }
+                        else if (meta.current_counter_entry.index == 3) {
+                            prefix4_iterations_reg1.write(hash1, current_iteration_no);
+                            prefix4_iterations_reg2.write(hash2, current_iteration_no);
+                            prefix4_iterations_reg3.write(hash3, current_iteration_no);
+                        }
+                        else if (meta.current_counter_entry.index == 4) {
+                            prefix5_iterations_reg1.write(hash1, current_iteration_no);
+                            prefix5_iterations_reg2.write(hash2, current_iteration_no);
+                            prefix5_iterations_reg3.write(hash3, current_iteration_no);
+                        }
+                        else if (meta.current_counter_entry.index == 5) {
+                            prefix6_iterations_reg1.write(hash1, current_iteration_no);
+                            prefix6_iterations_reg2.write(hash2, current_iteration_no);
+                            prefix6_iterations_reg3.write(hash3, current_iteration_no);
+                        }
+                    }
+                    else {
+                        new_addresses_seen = new_addresses_seen_counter_value;
+                    }
+
+                    // I do not know why but the new addresses seen is always 1 address less than the actual number of new addresses seen
+                    new_addresses_seen = new_addresses_seen + 1;
+
+                    // check if the new addresses seen counter needs to be reset, i.e., if the prefix last iteration number is different from the current iteration number
+                    if (prefix_last_iteration_no_value != current_iteration_no) {
+                        // reset the new addresses seen counter
+                        new_addresses_seen_counters.write(meta.current_counter_entry.index, 0);
+
+                        // update the prefix last iteration number
+                        prefix_last_iteration_no.write(meta.current_counter_entry.index, current_iteration_no);
+                    }
+                }
+                else {
+                    new_addresses_seen = 9999;
+                }
+            }
+
+            /************ Extracting flow time window packet count ************/
+            // compute the hash values for the flow
+            get_hash_inputs_flow(hdr.ipv6.srcAddr, hdr.ipv6.dstAddr, hash_input1, hash_input2, hash_input3);
+
+            jenkins_hash(hash_input1, hash1);
+            jenkins_hash(hash_input2, hash2);
+            jenkins_hash(hash_input3, hash3);
+
+            // check if this is the first time we see this flow so that we can initialize the flow window start time
+            bit<1> flow_first_window_set1;
+            bit<1> flow_first_window_set2;
+            bit<1> flow_first_window_set3;
+            flow_first_window_set.read(flow_first_window_set1, hash1);
+            flow_first_window_set.read(flow_first_window_set2, hash2);
+            flow_first_window_set.read(flow_first_window_set3, hash3);
+            if (flow_first_window_set1 == 0 || flow_first_window_set2 == 0 || flow_first_window_set3 == 0) {
+                // set the flow window start time to the current time
+                flow_window_start_time1.write(hash1, current_time);
+                flow_window_start_time2.write(hash2, current_time);
+                flow_window_start_time3.write(hash3, current_time);
+                // set the flow first window set to 1
+                flow_first_window_set.write(hash1, 1);
+                flow_first_window_set.write(hash2, 1);
+                flow_first_window_set.write(hash3, 1);
+            }
+
+            // get the flow window start time
+            timestamp_t flow_window_start_time_value1;
+            timestamp_t flow_window_start_time_value2;
+            timestamp_t flow_window_start_time_value3;
+            flow_window_start_time1.read(flow_window_start_time_value1, hash1);
+            flow_window_start_time2.read(flow_window_start_time_value2, hash2);
+            flow_window_start_time3.read(flow_window_start_time_value3, hash3);
+
+            // get the flow window packet count
+            counter_t flow_window_packet_count1;
+            counter_t flow_window_packet_count2;
+            counter_t flow_window_packet_count3;
+            flow_window_packet_counter1.read(flow_window_packet_count1, hash1);
+            flow_window_packet_counter2.read(flow_window_packet_count2, hash2);
+            flow_window_packet_counter3.read(flow_window_packet_count3, hash3);
+
+            
+            // check if the flow window expired, if so reset the flow window start time and the flow window packet count
+            if ((current_time - flow_window_start_time_value1) > FLOW_TIME_WINDOW_SIZE ||
+                (current_time - flow_window_start_time_value2) > FLOW_TIME_WINDOW_SIZE ||
+                (current_time - flow_window_start_time_value3) > FLOW_TIME_WINDOW_SIZE) {
+                // reset the flow window start time to the current time
+                flow_window_start_time1.write(hash1, current_time);
+                flow_window_start_time2.write(hash2, current_time);
+                flow_window_start_time3.write(hash3, current_time);
+                // reset the flow window packet count to 1
+                flow_window_packet_count1 = 1;
+                flow_window_packet_count2 = 1;
+                flow_window_packet_count3 = 1;
+            }
+            else {
+                // increment the flow window packet count
+                flow_window_packet_count1 = flow_window_packet_count1 + 1;
+                flow_window_packet_count2 = flow_window_packet_count2 + 1;
+                flow_window_packet_count3 = flow_window_packet_count3 + 1;
+            }
+
+            // update the flow window packet count
+            flow_window_packet_counter1.write(hash1, flow_window_packet_count1);
+            flow_window_packet_counter2.write(hash2, flow_window_packet_count2);
+            flow_window_packet_counter3.write(hash3, flow_window_packet_count3);
+
+            // get the minimum flow window packet count
+            flow_window_packet_count = (flow_window_packet_count1 < flow_window_packet_count2) ? (flow_window_packet_count1 < flow_window_packet_count3 ? flow_window_packet_count1 : flow_window_packet_count3) : (flow_window_packet_count2 < flow_window_packet_count3 ? flow_window_packet_count2 : flow_window_packet_count3);
+
+            /******* Extracting prefix time window packet count *******/
+            // compute the hash values for the prefix
+            get_hash_inputs_prefix(meta.current_network.network_addr, meta.current_network.prefix_len, hash_input1, hash_input2, hash_input3);
+
+            jenkins_hash(hash_input1, hash1);
+            jenkins_hash(hash_input2, hash2);
+            jenkins_hash(hash_input3, hash3);
+
+            // check if this is the first time we see this prefix so that we can initialize the prefix window start time
+            bit<1> prefix_first_window_set1;
+            bit<1> prefix_first_window_set2;
+            bit<1> prefix_first_window_set3;
+            prefix_first_window_set.read(prefix_first_window_set1, hash1);
+            prefix_first_window_set.read(prefix_first_window_set2, hash2);
+            prefix_first_window_set.read(prefix_first_window_set3, hash3);
+            if (prefix_first_window_set1 == 0 || prefix_first_window_set2 == 0 || prefix_first_window_set3 == 0) {
+                // set the prefix window start time to the current time
+                prefix_window_start_time1.write(hash1, current_time);
+                prefix_window_start_time2.write(hash2, current_time);
+                prefix_window_start_time3.write(hash3, current_time);
+                // set the prefix first window set to 1
+                prefix_first_window_set.write(hash1, 1);
+                prefix_first_window_set.write(hash2, 1);
+                prefix_first_window_set.write(hash3, 1);
+            }
+
+            // get the prefix window start time
+            timestamp_t prefix_window_start_time_value1;
+            timestamp_t prefix_window_start_time_value2;
+            timestamp_t prefix_window_start_time_value3;
+            prefix_window_start_time1.read(prefix_window_start_time_value1, hash1);
+            prefix_window_start_time2.read(prefix_window_start_time_value2, hash2);
+            prefix_window_start_time3.read(prefix_window_start_time_value3, hash3);
+
+            // get the prefix window packet count
+            counter_t prefix_window_packet_count1;
+            counter_t prefix_window_packet_count2;
+            counter_t prefix_window_packet_count3;
+            prefix_window_packet_counter1.read(prefix_window_packet_count1, hash1);
+            prefix_window_packet_counter2.read(prefix_window_packet_count2, hash2);
+            prefix_window_packet_counter3.read(prefix_window_packet_count3, hash3);
+
+            // check if the prefix window expired, if so reset the prefix window start time and the prefix window packet count
+            if ((current_time - prefix_window_start_time_value1) > PREFIX_TIME_WINDOW_SIZE ||
+                (current_time - prefix_window_start_time_value2) > PREFIX_TIME_WINDOW_SIZE ||
+                (current_time - prefix_window_start_time_value3) > PREFIX_TIME_WINDOW_SIZE) {
+                // reset the prefix window start time to the current time
+                prefix_window_start_time1.write(hash1, current_time);
+                prefix_window_start_time2.write(hash2, current_time);
+                prefix_window_start_time3.write(hash3, current_time);
+                // reset the prefix window packet count to 1
+                prefix_window_packet_count1 = 1;
+                prefix_window_packet_count2 = 1;
+                prefix_window_packet_count3 = 1;
+            }
+            else {
+                // increment the prefix window packet count
+                prefix_window_packet_count1 = prefix_window_packet_count1 + 1;
+                prefix_window_packet_count2 = prefix_window_packet_count2 + 1;
+                prefix_window_packet_count3 = prefix_window_packet_count3 + 1;
+            }
+
+            // update the prefix window packet count
+            prefix_window_packet_counter1.write(hash1, prefix_window_packet_count1);
+            prefix_window_packet_counter2.write(hash2, prefix_window_packet_count2);
+            prefix_window_packet_counter3.write(hash3, prefix_window_packet_count3);
+
+            // get the minimum prefix window packet count
+            prefix_window_packet_count = (prefix_window_packet_count1 < prefix_window_packet_count2) ? (prefix_window_packet_count1 < prefix_window_packet_count3 ? prefix_window_packet_count1 : prefix_window_packet_count3) : (prefix_window_packet_count2 < prefix_window_packet_count3 ? prefix_window_packet_count2 : prefix_window_packet_count3);
+
+
+            /************************************* Feature Preparation *************************************/
+            //// preparing the features for the ML Surrogate Model rules
+            // get the encoded value of the source address
+            #include "generated_code/encode_src_ipv6_addr.p4.part" // sets src_ipv6_addr to the encoded value
+
+            // get the encoded value of the protocol (0 for ICMPv6 and 1 for TCP)
+            if (hdr.ipv6.isValid() && hdr.ipv6.nextHdr == TYPE_ICMPV6) {
+                protocol = 0;
+            }
+            else if (hdr.ipv6.isValid() && hdr.ipv6.nextHdr == TYPE_TCP) {
+                protocol = 1;
+            }
+            else {
+                protocol = 2;
+            }
+            
+            // multiply all features and used headers by 1000 twice (except inter packet times)
+            hop_count = hop_count * 1000 * 1000;
+            new_addresses_seen = new_addresses_seen * 1000 * 1000;
+            src_ipv6_addr = src_ipv6_addr * 1000 * 1000;
+            port = port * 1000 * 1000;
+            protocol = protocol * 1000 * 1000;
+            flow_window_packet_count = flow_window_packet_count * 1000 * 1000;
+            prefix_window_packet_count = prefix_window_packet_count * 1000 * 1000;
+
+            // note: no need to convert the inter packet times because they are already in the correct unit (microseconds)
+            // write the inter packet times into the test reg
+            // test.write(0, (bit<256>)(bit<48>)inter_packet_time);
+            // test.write(1, (bit<256>)(bit<48>)prefix_inter_packet_time);
+
+            // write new addresses seen into the test reg
+            test.write(2, (bit<256>)new_addresses_seen);
+
+            // write the hop count into the test reg
+            test.write(3, (bit<256>)hop_count);
+
+            // write the source address into the test reg
+            test.write(4, (bit<256>)src_ipv6_addr);
+
+            // write the port into the test reg
+            test.write(5, (bit<256>)port);
+
+            // write current and min iteration number into the test reg
+            // test.write(6, (bit<256>)current_iteration_no);
+            // test.write(7, (bit<256>)min_iteration_no);
+
+            // write the flow window packet count into the test reg
+            test.write(6, (bit<256>)flow_window_packet_count);
+
+            // write the prefix window packet count into the test reg
+            test.write(7, (bit<256>)prefix_window_packet_count);
+
+            // write flow window start time values into the test reg
+            test.write(8, (bit<256>)flow_window_start_time_value1);
+            test.write(9, (bit<256>)flow_window_start_time_value2);
+            test.write(10, (bit<256>)flow_window_start_time_value3);
+
+            // write prefix window start time values into the test reg
+            test.write(11, (bit<256>)prefix_window_start_time_value1);
+            test.write(12, (bit<256>)prefix_window_start_time_value2);
+            test.write(13, (bit<256>)prefix_window_start_time_value3);
+
+            /************************************* ML Surrogate Model *************************************/
+            // #include "generated_code/ml_surrogate_model_rules.p4.part"
+            
+            /*************************************** Experiment Logging ***************************************/
+            // calculate and store the ingress packet processing duration
+            // bit<32> last_duration_index;
+
+            // last_duration_index_reg.read(last_duration_index, 0);
+            // // check if the packet is TCP or ICMPv6 NS (the experiments only have TCP and ICMPv6 NS packets)
+            // if (hdr.tcp.isValid() || (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS)) {
+            //     // calculate the duration
+            //     duration_t duration = (duration_t)((timestamp_t)standard_metadata.enq_timestamp - standard_metadata.ingress_global_timestamp);
+            //     // store the duration in the ingress_packet_processing_durations_reg
+            //     ingress_packet_processing_durations_reg.write(last_duration_index, duration);
+            //     // increment the last_duration_index
+            //     last_duration_index = last_duration_index + 1;
+            //     last_duration_index_reg.write(0, last_duration_index);
+            // }
+
+            // get metadata last index
+            bit<32> last_metadata_index;
+
+            last_metadata_index_reg.read(last_metadata_index, 0);
+            // check if the packet is TCP or ICMPv6 NS (the experiments only have TCP and ICMPv6 NS packets)
+            if (hdr.tcp.isValid() || (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS)) {
+                // get the packet id (tsVal if tcp or icmpv6_ns tgt address)
+                bit<128> packet_id = 0;
+                if (hdr.tcp.isValid()) {
+                    packet_id = (bit<128>)hdr.tcp_option_ts.tsVal;
+                }
+                else if (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS) {
+                    packet_id = hdr.icmpv6_ns.targetAddress;
+                }
+                // store the packet id in the metadata_reg
+                metadata_reg.write(last_metadata_index, packet_id);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+                
+                // store the source address in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)src_ipv6_addr);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // // store the flow inter-packet time 1 in the metadata_reg
+                // metadata_reg.write(last_metadata_index, (bit<128>)flow_inter_packet_time1);
+                // // increment the last_metadata_index
+                // last_metadata_index = last_metadata_index + 1;
+
+                // // store the flow inter-packet time 2 in the metadata_reg
+                // metadata_reg.write(last_metadata_index, (bit<128>)flow_inter_packet_time2);
+                // // increment the last_metadata_index
+                // last_metadata_index = last_metadata_index + 1;
+
+                // // store the flow inter-packet time 3 in the metadata_reg
+                // metadata_reg.write(last_metadata_index, (bit<128>)flow_inter_packet_time3);
+                // // increment the last_metadata_index
+                // last_metadata_index = last_metadata_index + 1;
+
+                // // store the prefix inter-packet time 1 in the metadata_reg
+                // metadata_reg.write(last_metadata_index, (bit<128>)prefix_inter_packet_time1);
+                // // increment the last_metadata_index
+                // last_metadata_index = last_metadata_index + 1;
+
+                // // store the prefix inter-packet time 2 in the metadata_reg
+                // metadata_reg.write(last_metadata_index, (bit<128>)prefix_inter_packet_time2);
+                // // increment the last_metadata_index
+                // last_metadata_index = last_metadata_index + 1;
+
+                // // store the prefix inter-packet time 3 in the metadata_reg
+                // metadata_reg.write(last_metadata_index, (bit<128>)prefix_inter_packet_time3);
+                // // increment the last_metadata_index
+                // last_metadata_index = last_metadata_index + 1;
+
+                // store the hop count in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)hop_count);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the new addresses seen in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)new_addresses_seen);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the port in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)port);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the protocol in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)protocol);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the flow window packet count in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)flow_window_packet_count);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the prefix window packet count in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)prefix_window_packet_count);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the flow window start time 1 in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)flow_window_start_time_value1);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the flow window start time 2 in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)flow_window_start_time_value2);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the flow window start time 3 in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)flow_window_start_time_value3);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the prefix window start time 1 in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)prefix_window_start_time_value1);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the prefix window start time 2 in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)prefix_window_start_time_value2);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // store the prefix window start time 3 in the metadata_reg
+                metadata_reg.write(last_metadata_index, (bit<128>)prefix_window_start_time_value3);
+                // increment the last_metadata_index
+                last_metadata_index = last_metadata_index + 1;
+
+                // write the last_metadata_index back to the last_metadata_index_reg
+                last_metadata_index_reg.write(0, last_metadata_index);
+            }
+
+            // // store the prefix inter-packet time 
+            // bit<32> last_prefix_inter_packet_time_index;
+
+            // last_prefix_inter_packet_time_index_reg.read(last_prefix_inter_packet_time_index, 0);
+            // // check if the packet is TCP or ICMPv6 NS (the experiments only have TCP and ICMPv6 NS packets)
+            // if (hdr.tcp.isValid() || (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS)) {
+            //     // store the prefix inter-packet time in the prefix_inter_packet_times_reg
+            //     prefix_inter_packet_times_reg.write(last_prefix_inter_packet_time_index, meta.prefix_inter_packet_time);
+            //     // increment the last_prefix_inter_packet_time_index
+            //     last_prefix_inter_packet_time_index = last_prefix_inter_packet_time_index + 1;
+            //     last_prefix_inter_packet_time_index_reg.write(0, last_prefix_inter_packet_time_index);
+            // }
+
+            // // store the flow inter-packet time
+            // bit<32> last_flow_inter_packet_time_index;
+
+            // last_flow_inter_packet_time_index_reg.read(last_flow_inter_packet_time_index, 0);
+            // // check if the packet is TCP or ICMPv6 NS (the experiments only have TCP and ICMPv6 NS packets)
+            // if (hdr.tcp.isValid() || (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS)) {
+            //     // store the flow inter-packet time in the flow_inter_packet_times_reg
+            //     flow_inter_packet_times_reg.write(last_flow_inter_packet_time_index, meta.inter_packet_time);
+            //     // increment the last_flow_inter_packet_time_index
+            //     last_flow_inter_packet_time_index = last_flow_inter_packet_time_index + 1;
+            //     last_flow_inter_packet_time_index_reg.write(0, last_flow_inter_packet_time_index);
+            // }
+
+            // bit<32> last_src_addr_index;
+
+            // last_src_addr_index_reg.read(last_src_addr_index, 0);
+            // if (hdr.tcp.isValid() || (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS)) {
+            //     src_addr_reg.write(last_src_addr_index, meta.src_addr);
+            //     last_src_addr_index = last_src_addr_index + 1;
+            //     last_src_addr_index_reg.write(0, last_src_addr_index);
+            // }
+
+            // // store packet id (tsval if tcp or icmpv6_ns tgt address)
+            // bit<32> last_packet_id_index;
+
+            // last_packet_id_index_reg.read(last_packet_id_index, 0);
+            // // check if the packet is TCP or ICMPv6 NS (the experiments only have TCP and ICMPv6 NS packets)
+            // if (hdr.tcp.isValid()) {
+            //     // store the packet id in the packet_ids_reg (tsVal)
+            //     packet_ids_reg.write(last_packet_id_index, (bit<128>)hdr.tcp_option_ts.tsVal);
+            //     // increment the last_packet_id_index
+            //     last_packet_id_index = last_packet_id_index + 1;
+            //     last_packet_id_index_reg.write(0, last_packet_id_index);
+            // }
+            // else if (hdr.icmpv6.isValid() && hdr.icmpv6.type == TYPE_ICMPV6_NS) {
+            //     // store the packet id in the packet_ids_reg (tgt address)
+            //     packet_ids_reg.write(last_packet_id_index, hdr.icmpv6_ns.targetAddress);
+            //     // increment the last_packet_id_index
+            //     last_packet_id_index = last_packet_id_index + 1;
+            //     last_packet_id_index_reg.write(0, last_packet_id_index);
+            // }
+        }
+
+        
+
+        /**************************************** Forwarding ****************************************/
+        if (!meta.should_drop && hdr.ethernet.isValid()) {
+            mac_lookup.apply();
+        }
+    }
+}
+
+/*************************************************************************
+****************  E G R E S S   P R O C E S S I N G   *******************
+*************************************************************************/
+
+control MyEgress(inout headers hdr,
+                 inout metadata meta,
+                 inout standard_metadata_t standard_metadata) {
+
+    action drop() {
+        mark_to_drop(standard_metadata);
+    }
+
+    apply {
+        // Prune multicast packet to ingress port to preventing loop
+        if (standard_metadata.egress_port == standard_metadata.ingress_port)
+            drop();
+        
+        // if the egress port is 200, then drop the packet
+        if (standard_metadata.egress_port == 200) {
+            drop();
+        }
+
+    }
+}
+
+/*************************************************************************
+*************   C H E C K S U M    C O M P U T A T I O N   **************
+*************************************************************************/
+
+control MyComputeChecksum(inout headers hdr, inout metadata meta) {
+     apply {
+
+    }
+}
+
+
+/*************************************************************************
+***********************  D E P A R S E R  *******************************
+*************************************************************************/
+
+control MyDeparser(packet_out packet, in headers hdr) {
+    apply {
+        packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv6);
+        packet.emit(hdr.tcp);
+        packet.emit(hdr.tcp_option_ts);
+        packet.emit(hdr.tcp_option_end);
+        packet.emit(hdr.tcp_option_padding);
+        packet.emit(hdr.icmpv6);
+        packet.emit(hdr.icmpv6_ns);
+        // Note: this will not cause a problem because TCP and ICMPv6 headers are mutually exclusive in the experiments
+        // so the switch will ignore the TCP header if the packet is an ICMPv6 packet and vice versa
+    }
+}
+
+/*************************************************************************
+***********************  S W I T C H  *******************************
+*************************************************************************/
+
+V1Switch(
+MyParser(),
+MyVerifyChecksum(),
+MyIngress(),
+MyEgress(),
+MyComputeChecksum(),
+MyDeparser()
+) main;

@@ -1,0 +1,643 @@
+/* -*- P4_16 -*- */
+#include <core.p4>
+#include <v1model.p4>
+
+// define parameters for the defense mechanism
+#define TIME_THRESHOLD 1000000 // if the inter-packet interval is less than this threshold, increment the CMS (1 second in microseconds)
+#define UNICAST_COUNT_THRESHOLD 100 // number of packets
+#define MULTICAST_COUNT_THRESHOLD 10 // number of packets
+#define TIME_WINDOW 5000000 // the duration after which the CMS and window start time are reset (5 seconds in microseconds)
+#define BUCKET_COUNT 1024 // number of buckets for CMS, timestamp and multicast registers (hash table size)
+
+typedef bit<32> timestamp_t; // timestamp type (48-bit)
+typedef bit<32> counter_t; // counter type for CMS (32-bit)
+
+// define parameters for the experiments
+#define ATTACKER_MAC 0x020101010001
+
+// define types and codes for headers
+#define TYPE_IPV6 0x86DD
+#define ICMPV6 0x3A
+#define ICMPV6_RS 133
+#define ICMPV6_RA 134
+#define ICMPV6_NS 135
+#define ICMPV6_NA 136
+
+// const bit<16> TYPE_IPV6 = 0x86DD;
+
+// const bit<8> ICMPV6 = 0x3A;
+// const bit<8> ICMPV6_RA = 134;
+// const bit<8> ICMPV6_NS = 135;
+// const bit<8> ICMPV6_NA = 136;
+
+/*************************************************************************
+*********************** H E A D E R S  ***********************************
+*************************************************************************/
+
+typedef bit<9> egressSpec_t;
+typedef bit<48> macAddr_t;
+typedef bit<128> ip6Addr_t;
+
+header ethernet_t {
+    macAddr_t dstAddr;
+    macAddr_t srcAddr;
+    bit<16> etherType;
+}
+
+header ipv6_t {
+    bit<4> version;
+    bit<8> trafficClass;
+    bit<20> flowLabel;
+    bit<16> payloadLen;
+    bit<8> nextHdr;
+    bit<8> hopLimit;
+    ip6Addr_t srcAddr;
+    ip6Addr_t dstAddr;
+}
+
+header icmpv6_t {
+    bit<8> type;
+    bit<8> code;
+    bit<16> checksum;
+}
+
+header ns_t {
+    bit<32> reserved;
+    ip6Addr_t targetAddr;
+}
+
+header na_t {
+    bit<3> flags;
+    bit<29> reserved;
+    ip6Addr_t targetAddr;
+}
+
+header ra_t {
+    bit<8> curHopLimit;
+    bit<8> flags;
+    bit<16> routerLifetime;
+    bit<32> reachableTime;
+    bit<32> retransTimer;
+}
+
+struct headers {
+    ethernet_t ethernet;
+    ipv6_t ipv6;
+    icmpv6_t icmpv6;
+    ns_t ns;
+    na_t na;
+    ra_t ra;
+}
+
+struct metadata {
+    bit<32> meter_tag;
+    bit<1> should_drop;
+    bit<1> flood_detected;
+    bit<1> bypass_defense; // New field to indicate if defense mechanisms should be bypassed
+    bit<32> total_packet_count; // For logging purposes
+    bit<32> total_icmpv6_count; // For logging purposes
+    bit<32> attack_drop_count; // For logging purposes
+    bit<32> benign_drop_count; // For logging purposes
+    bit<32> ns_counter; // For logging purposes
+    bit<32> na_counter; // For logging purposes
+    bit<32> ra_counter; // For logging purposes
+    bit<32> rs_counter; // For logging purposes
+    bit<32> test_value; // For testing purposes
+}
+
+/*************************************************************************
+*********************** P A R S E R  ***********************************
+*************************************************************************/
+
+parser MyParser(packet_in packet,
+                out headers hdr,
+                inout metadata meta,
+                inout standard_metadata_t standard_metadata) {
+
+    state start {
+        transition parse_ethernet;
+    }
+
+    state parse_ethernet {
+        packet.extract(hdr.ethernet);
+        transition select(hdr.ethernet.etherType) {
+            TYPE_IPV6: parse_ipv6;
+            default: accept;
+        }
+    }
+
+    state parse_ipv6 {
+        packet.extract(hdr.ipv6);
+        transition select(hdr.ipv6.nextHdr) {
+            ICMPV6: parse_icmpv6;
+            default: accept;
+        }
+    }
+
+    state parse_icmpv6 {
+        packet.extract(hdr.icmpv6);
+        transition select(hdr.icmpv6.type) {
+            ICMPV6_NS: parse_ns;
+            ICMPV6_NA: parse_na;
+            ICMPV6_RA: parse_ra;
+            default: accept;
+        }
+    }
+
+    state parse_ns {
+        packet.extract(hdr.ns);
+        transition accept;
+    }
+
+    state parse_na {
+        packet.extract(hdr.na);
+        transition accept;
+    }
+
+    state parse_ra {
+        packet.extract(hdr.ra);
+        transition accept;
+    }
+}
+
+/*************************************************************************
+**************  I N G R E S S   P R O C E S S I N G   *******************
+*************************************************************************/
+
+// counter registers
+register<bit<32>>(1) icmpv6_counter_reg;
+register<bit<32>>(1) ns_counter_reg;
+register<bit<32>>(1) na_counter_reg;
+register<bit<32>>(1) ra_counter_reg;
+register<bit<32>>(1) rs_counter_reg;
+register<bit<32>>(2) drop_counter_reg; // 0 for attacker, 1 for benign
+register<bit<32>>(1) total_packet_counter_reg;
+
+// data structures for defense mechanism
+register<counter_t>(BUCKET_COUNT) cms0;
+register<counter_t>(BUCKET_COUNT) cms1;
+register<counter_t>(BUCKET_COUNT) cms2;
+register<timestamp_t>(BUCKET_COUNT) timestamp0;
+register<timestamp_t>(BUCKET_COUNT) timestamp1;
+register<timestamp_t>(BUCKET_COUNT) timestamp2;
+register<timestamp_t>(BUCKET_COUNT) window_start_time0;
+register<timestamp_t>(BUCKET_COUNT) window_start_time1;
+register<timestamp_t>(BUCKET_COUNT) window_start_time2;
+register<timestamp_t>(1) last_packet_time;
+register<bit<1>>(BUCKET_COUNT) multicast_reg; // Maps hashes to a bit (1 if multicast, 0 if not)
+register<bit<1>>(BUCKET_COUNT) first_window_set; // Indicates if the first time window has been set (1 if set, 0 if not)
+
+void increment_cms(in bit<32> hash1, in bit<32> hash2, in bit<32> hash3) {
+    bit<32> val1;
+    bit<32> val2;
+    bit<32> val3;
+
+    cms0.read(val1, hash1);
+    cms1.read(val2, hash2);
+    cms2.read(val3, hash3);
+
+    cms0.write(hash1, val1 + 1);
+    cms1.write(hash2, val2 + 1);
+    cms2.write(hash3, val3 + 1);
+}
+
+void update_timestamps(in bit<32> hash1, in bit<32> hash2, in bit<32> hash3, in timestamp_t current_time) {
+    timestamp0.write(hash1, current_time);
+    timestamp1.write(hash2, current_time);
+    timestamp2.write(hash3, current_time);
+}
+
+void increment_icmpv6_counter(inout metadata meta) {
+    bit<32> icmpv6_counter_val;
+    icmpv6_counter_reg.read(icmpv6_counter_val, 0);
+    icmpv6_counter_val = icmpv6_counter_val + 1;
+    icmpv6_counter_reg.write(0, icmpv6_counter_val);
+    meta.total_icmpv6_count = icmpv6_counter_val;
+}
+
+control MyIngress(inout headers hdr,
+                  inout metadata meta,
+                  inout standard_metadata_t standard_metadata) {
+    
+    action jenkins_hash(in bit<128> key, out bit<32> hash1, out bit<32> hash2, out bit<32> hash3) {
+        bit<32> h = 0;
+        bit<32> temp = (bit<32>)key;
+
+        h = h + temp;
+        h = h + (h << 10);
+        h = h ^ (h >> 6);
+        hash1 = h % BUCKET_COUNT;
+
+        h = h + (h << 3);
+        h = h ^ (h >> 11);
+        hash2 = h % BUCKET_COUNT;
+
+        h = h + (h << 15);
+        hash3 = h % BUCKET_COUNT;
+    }
+    
+    // action jenkins_hash(in bit<32> key, out bit<32> hash_result) {
+    //     // Split the 32-bit key into four 8-bit chunks
+    //     // the bytes are 32 bits long to add them to the hash_result
+    //     // (both need to be the same size)
+    //     bit<32> byte0 = key & 0xFF;
+    //     bit<32> byte1 = (key >> 8) & 0xFF;
+    //     bit<32> byte2 = (key >> 16) & 0xFF;
+    //     bit<32> byte3 = (key >> 24) & 0xFF;
+
+    //     // Initialize hash to zero
+    //     hash_result = 0;
+
+    //     // Process each byte, following the JOAT steps
+    //     hash_result = hash_result + byte0;
+    //     hash_result = hash_result + (hash_result << 10);
+    //     hash_result = hash_result ^ (hash_result >> 6);
+
+    //     hash_result = hash_result + byte1;
+    //     hash_result = hash_result + (hash_result << 10);
+    //     hash_result = hash_result ^ (hash_result >> 6);
+
+    //     hash_result = hash_result + byte2;
+    //     hash_result = hash_result + (hash_result << 10);
+    //     hash_result = hash_result ^ (hash_result >> 6);
+
+    //     hash_result = hash_result + byte3;
+    //     hash_result = hash_result + (hash_result << 10);
+    //     hash_result = hash_result ^ (hash_result >> 6);
+
+    //     // Final mixing steps
+    //     hash_result = hash_result + (hash_result << 3);
+    //     hash_result = hash_result ^ (hash_result >> 11);
+    //     hash_result = hash_result + (hash_result << 15);
+
+    //     // Make it within bucket size
+    //     hash_result = hash_result % BUCKET_COUNT;
+    // }
+
+    // hash both addresses and sum up the results
+    action get_hash_inputs(in bit<128> src_addr, in bit<128> dst_addr, out bit<32> input1, out bit<32> input2, out bit<32> input3) {
+        bit<32> src_addr_p1 = (bit<32>)src_addr; // first (rightmost) 32 bits of src_addr
+        bit<32> src_addr_p2 = (bit<32>)(src_addr >> 32); // the next 32 bits of src_addr
+        
+        bit<32> dst_addr_p1 = (bit<32>)dst_addr; // first (rightmost) 32 bits of dst_addr
+        bit<32> dst_addr_p2 = (bit<32>)(dst_addr >> 32); // the next 32 bits of dst_addr
+
+        input1 = src_addr_p1 ^ dst_addr_p2;
+        input2 = src_addr_p2 ^ dst_addr_p1;
+        input3 = src_addr_p1 ^ dst_addr_p1;
+    }
+
+    table log_packets {
+        actions = {
+            NoAction;
+        }
+        key = {
+            // standard_metadata.ingress_global_timestamp: exact;
+            hdr.ethernet.dstAddr: exact;
+            hdr.ethernet.srcAddr: exact;
+            meta.total_packet_count: exact;
+            meta.total_icmpv6_count: exact;
+            meta.ns_counter: exact;
+            meta.na_counter: exact;
+            meta.ra_counter: exact;
+            meta.rs_counter: exact;
+            meta.attack_drop_count: exact;
+            meta.benign_drop_count: exact;
+            meta.test_value: exact;
+        }
+        size = BUCKET_COUNT;
+        default_action = NoAction();
+    }
+
+    action drop() {
+        mark_to_drop(standard_metadata);
+    }
+
+    action multicast() {
+        standard_metadata.mcast_grp = 1;
+    }
+
+    action mac_forward(egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+    }
+
+    table mac_lookup {
+        key = {
+            hdr.ethernet.dstAddr : exact;
+        }
+        actions = {
+            multicast;
+            mac_forward;
+            drop;
+        }
+        size = BUCKET_COUNT;
+        default_action = multicast;
+    }
+
+    apply {
+        // Get current time
+        timestamp_t current_time = (bit<32>)standard_metadata.ingress_global_timestamp;
+        meta.test_value = current_time;
+        timestamp_t last_time;
+        last_packet_time.read(last_time, 0);
+
+        // Increment total packet counter
+        bit<32> total_packet_counter_val;
+        total_packet_counter_reg.read(total_packet_counter_val, 0);
+        total_packet_counter_val = total_packet_counter_val + 1;
+        total_packet_counter_reg.write(0, total_packet_counter_val);
+        meta.total_packet_count = total_packet_counter_val;
+
+        // Initialize should_drop
+        meta.should_drop = 0;
+
+        // Check if more than 100 seconds (100,000,000 microseconds) have passed since the last packet
+        if (current_time - last_time > 100000000) {
+            // Update last packet time and set bypass flag
+            last_packet_time.write(0, current_time);
+            meta.bypass_defense = 1;
+        } else {
+            // Update last packet time
+            last_packet_time.write(0, current_time);
+            meta.bypass_defense = 0;
+        }
+
+        // Drop mDNS packets to make the logs more readable
+        // if (hdr.ipv6.isValid() && hdr.udp.isValid() && hdr.udp.dstPort == UDP_PORT_MDNS) {
+        //     drop();
+        //     return;
+        // }
+
+        if (hdr.ipv6.isValid() && hdr.ipv6.nextHdr == ICMPV6) {
+            increment_icmpv6_counter(meta); // Increment ICMPv6 packet counter
+            
+            // check if packet is NS, NA, RA or RS then increment the respective counter
+            if (hdr.icmpv6.type == ICMPV6_NS) {
+                bit<32> ns_counter_val;
+                ns_counter_reg.read(ns_counter_val, 0);
+                ns_counter_val = ns_counter_val + 1;
+                ns_counter_reg.write(0, ns_counter_val);
+            } else if (hdr.icmpv6.type == ICMPV6_NA) {
+                bit<32> na_counter_val;
+                na_counter_reg.read(na_counter_val, 0);
+                na_counter_val = na_counter_val + 1;
+                na_counter_reg.write(0, na_counter_val);
+            } else if (hdr.icmpv6.type == ICMPV6_RA) {
+                bit<32> ra_counter_val;
+                ra_counter_reg.read(ra_counter_val, 0);
+                ra_counter_val = ra_counter_val + 1;
+                ra_counter_reg.write(0, ra_counter_val);
+            } else if (hdr.icmpv6.type == ICMPV6_RS) {
+                bit<32> rs_counter_val;
+                rs_counter_reg.read(rs_counter_val, 0);
+                rs_counter_val = rs_counter_val + 1;
+                rs_counter_reg.write(0, rs_counter_val);
+            }
+
+            bit<32> hash1_src;
+            bit<32> hash2_src;
+            bit<32> hash3_src;
+            bit<32> hash1_dst;
+            bit<32> hash2_dst;
+            bit<32> hash3_dst;
+            bit<32> hash1;
+            bit<32> hash2;
+            bit<32> hash3;
+            bit<32> input1;
+            bit<32> input2;
+            bit<32> input3;
+            bit<1> multicast_val1;
+            bit<1> multicast_val2;
+            bit<1> multicast_val3;
+
+            // get the hash values for the flow
+            jenkins_hash(hdr.ipv6.srcAddr, hash1_src, hash2_src, hash3_src);
+            if (hdr.icmpv6.type == ICMPV6_NS) {
+                // get_hash_inputs(hdr.ipv6.srcAddr, hdr.ns.targetAddr, input1, input2, input3);
+                jenkins_hash(hdr.ns.targetAddr, hash1_dst, hash2_dst, hash3_dst);
+            } else if (hdr.icmpv6.type == ICMPV6_NA) {
+                // get_hash_inputs(hdr.ipv6.srcAddr, hdr.na.targetAddr, input1, input2, input3);
+                jenkins_hash(hdr.na.targetAddr, hash1_dst, hash2_dst, hash3_dst);
+            } else {
+                // get_hash_inputs(hdr.ipv6.srcAddr, hdr.ipv6.dstAddr, input1, input2, input3);
+                jenkins_hash(hdr.ipv6.dstAddr, hash1_dst, hash2_dst, hash3_dst);
+            }
+            hash1 = hash1_src ^ hash1_dst;
+            hash2 = hash2_src ^ hash2_dst;
+            hash3 = hash3_src ^ hash3_dst;
+
+            // jenkins_hash(input1, hash1);
+            // jenkins_hash(input2, hash2);
+            // jenkins_hash(input3, hash3);
+
+            // check if this is the first time the flow is seen so that we can set the window start time
+            bit<1> first_window_set_value1;
+            bit<1> first_window_set_value2;
+            bit<1> first_window_set_value3;
+            first_window_set.read(first_window_set_value1, hash1);
+            first_window_set.read(first_window_set_value2, hash2);
+            first_window_set.read(first_window_set_value3, hash3);
+            if (first_window_set_value1 == 0 || first_window_set_value2 == 0 || first_window_set_value3 == 0) {
+                // set the window start time for the flow
+                window_start_time0.write(hash1, current_time);
+                window_start_time1.write(hash2, current_time);
+                window_start_time2.write(hash3, current_time);
+                // set the first_window_set flag for the flow
+                first_window_set.write(hash1, 1);
+                first_window_set.write(hash2, 1);
+                first_window_set.write(hash3, 1);
+            }
+
+            // check if dst addr is multicast then set the multicast bit
+            bit<8> dst_addr_127_120 = (bit<8>)(hdr.ipv6.dstAddr >> 120);
+            if (dst_addr_127_120 == 0xFF) {
+                multicast_reg.write(hash1, 1);
+                multicast_reg.write(hash2, 1);
+                multicast_reg.write(hash3, 1);
+            }
+            multicast_reg.read(multicast_val1, hash1);
+            multicast_reg.read(multicast_val2, hash2);
+            multicast_reg.read(multicast_val3, hash3);
+
+            // read the last time the flow was seen
+            timestamp_t last_time1;
+            timestamp_t last_time2;
+            timestamp_t last_time3;
+            timestamp0.read(last_time1, hash1);
+            timestamp1.read(last_time2, hash2);
+            timestamp2.read(last_time3, hash3);
+
+            // read the window start time for the flow
+            timestamp_t window_start_time_value1;
+            timestamp_t window_start_time_value2;
+            timestamp_t window_start_time_value3;
+            window_start_time0.read(window_start_time_value1, hash1);
+            window_start_time1.read(window_start_time_value2, hash2);
+            window_start_time2.read(window_start_time_value3, hash3);
+
+            // check if the duration between now and the window start time is greater than the time window for the flow
+            if ((current_time - window_start_time_value1) > TIME_WINDOW ||
+                (current_time - window_start_time_value2) > TIME_WINDOW ||
+                (current_time - window_start_time_value3) > TIME_WINDOW) {
+                // reset the CMS and window start time for the flowS
+                cms0.write(hash1, 0);
+                cms1.write(hash2, 0);
+                cms2.write(hash3, 0);
+                window_start_time0.write(hash1, current_time);
+                window_start_time1.write(hash2, current_time);
+                window_start_time2.write(hash3, current_time);
+            }
+
+
+            bit<32> cms_val1;
+            bit<32> cms_val2;
+            bit<32> cms_val3;
+            cms0.read(cms_val1, hash1);
+            cms1.read(cms_val2, hash2);
+            cms2.read(cms_val3, hash3);
+
+            bit<32> min_val = (cms_val1 < cms_val2) ? (cms_val1 < cms_val3 ? cms_val1 : cms_val3) : (cms_val2 < cms_val3 ? cms_val2 : cms_val3);
+            // check multicast bit
+            if (multicast_val1 == 1 && multicast_val2 == 1 && multicast_val3 == 1) {
+                // the flow is multicast
+                if (min_val > MULTICAST_COUNT_THRESHOLD) {
+                    meta.should_drop = 1;
+                }
+            }
+            else {
+                // the flow is unicast
+                if (min_val > UNICAST_COUNT_THRESHOLD) {
+                    meta.should_drop = 1;
+                }
+            }
+
+            // Check intervals between packets is less than TIME_THRESHOLD
+            if ((current_time - last_time1) < TIME_THRESHOLD ||
+                (current_time - last_time2) < TIME_THRESHOLD ||
+                (current_time - last_time3) < TIME_THRESHOLD) {
+                increment_cms(hash1, hash2, hash3);
+            }
+
+            // Update the timestamps and counters for the flow
+            update_timestamps(hash1, hash2, hash3, current_time);
+        }
+
+        // read the counters for logging
+        bit<32> ns_counter_val;
+        bit<32> na_counter_val;
+        bit<32> ra_counter_val;
+        bit<32> rs_counter_val;
+        bit<32> icmpv6_counter_val;
+        ns_counter_reg.read(ns_counter_val, 0);
+        na_counter_reg.read(na_counter_val, 0);
+        ra_counter_reg.read(ra_counter_val, 0);
+        rs_counter_reg.read(rs_counter_val, 0);
+        icmpv6_counter_reg.read(icmpv6_counter_val, 0);
+        meta.ns_counter = ns_counter_val;
+        meta.na_counter = na_counter_val;
+        meta.ra_counter = ra_counter_val;
+        meta.rs_counter = rs_counter_val;
+        meta.total_icmpv6_count = icmpv6_counter_val;
+        
+        // read the drop counter values for logging
+        bit<32> attack_drop_counter_val;
+        bit<32> benign_drop_counter_val;
+        drop_counter_reg.read(attack_drop_counter_val, 0);
+        drop_counter_reg.read(benign_drop_counter_val, 1);
+        meta.attack_drop_count = attack_drop_counter_val;
+        meta.benign_drop_count = benign_drop_counter_val;
+
+
+        if (meta.should_drop == 1) {
+            drop();
+            // check if the packet is from the attacker
+            if (hdr.ethernet.isValid() && hdr.ethernet.srcAddr == ATTACKER_MAC) {
+                // increment the drop counter for the attacker (index 0)
+                attack_drop_counter_val = attack_drop_counter_val + 1;
+                drop_counter_reg.write(0, attack_drop_counter_val);
+                meta.attack_drop_count = attack_drop_counter_val;
+            } else {
+                // increment the drop counter for the benign host (index 1)
+                benign_drop_counter_val = benign_drop_counter_val + 1;
+                drop_counter_reg.write(1, benign_drop_counter_val);
+                meta.benign_drop_count = benign_drop_counter_val;
+            }
+        }
+        else if (hdr.ethernet.isValid()) {
+            mac_lookup.apply(); // forward to the port if known, else broadcast
+        }
+
+        log_packets.apply();
+
+    }
+}
+
+/*************************************************************************
+****************  E G R E S S   P R O C E S S I N G   *******************
+*************************************************************************/
+
+control MyEgress(inout headers hdr,
+                 inout metadata meta,
+                 inout standard_metadata_t standard_metadata) {
+    action drop() {
+        // Don't count the packets as dropped in the egress
+        mark_to_drop(standard_metadata);
+    }
+
+    // table log_packets {
+    //     actions = {
+    //         NoAction;
+    //     }
+    //     key = {
+    //         meta.attack_drop_count: exact;
+    //         meta.total_icmpv6_count: exact;
+    //         meta.total_packet_count: exact;
+    //     }
+    //     size = BUCKET_COUNT;
+    //     default_action = NoAction();
+    // }
+
+    apply {
+        // Prune multicast packet to ingress port to preventing loop
+        if (standard_metadata.egress_port == standard_metadata.ingress_port)
+            drop();
+        // log_packets.apply();
+    }
+}
+
+control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
+    apply { }
+}
+
+control MyComputeChecksum(inout headers hdr, inout metadata meta) {
+    apply { }
+}
+
+/*************************************************************************
+***********************  D E P A R S E R  *******************************
+*************************************************************************/
+
+control MyDeparser(packet_out packet, in headers hdr) {
+    apply {
+        packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv6);
+        packet.emit(hdr.icmpv6);
+        packet.emit(hdr.ns);
+        packet.emit(hdr.na);
+        packet.emit(hdr.ra);
+    }
+}
+
+/*************************************************************************
+***********************  S W I T C H  *******************************
+*************************************************************************/
+
+V1Switch(
+    MyParser(),
+    MyVerifyChecksum(),
+    MyIngress(),
+    MyEgress(),
+    MyComputeChecksum(),
+    MyDeparser()
+) main;
+

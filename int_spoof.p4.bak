@@ -1,0 +1,311 @@
+/* -*- P4_16 -*- */
+#include <core.p4>
+#include <v1model.p4>
+
+/*************************************************************************
+************************* P A R A M E T E R S  ***************************
+*************************************************************************/
+
+#define TYPE_IPV6 0x86DD
+#define ICMPV6 0x3A
+#define ICMPV6_NS 135
+#define BUCKET_COUNT 1024
+
+/*************************************************************************
+*********************** H E A D E R S  ***********************************
+*************************************************************************/
+
+typedef bit<9>  egressSpec_t;
+typedef bit<48> macAddr_t;
+typedef bit<128> ip6Addr_t;
+typedef bit<32> ip4Addr_t;
+
+header ethernet_t {
+    macAddr_t dstAddr;
+    macAddr_t srcAddr;
+    bit<16>   etherType;
+}
+
+header ipv6_t {
+    bit<4> version;
+    bit<8> trafficClass;
+    bit<20> flowLabel;
+    bit<16> payloadLen;
+    bit<8> nextHdr;
+    bit<8> hopLimit;
+    ip6Addr_t srcAddr;
+    ip6Addr_t dstAddr;
+}
+
+header icmpv6_t {
+    bit<8> type;
+    bit<8> code;
+    bit<16> checksum;
+    bit<32> body;
+}
+
+struct metadata {
+    bool should_drop;
+    bool skip_processing;
+}
+
+struct headers {
+    ethernet_t   ethernet;
+    ipv6_t ipv6;
+    icmpv6_t icmpv6;
+}
+
+/*************************************************************************
+*********************** P A R S E R  ***********************************
+*************************************************************************/
+
+parser MyParser(packet_in packet,
+                out headers hdr,
+                inout metadata meta,
+                inout standard_metadata_t standard_metadata) {
+
+    state start {
+        transition parse_ethernet;
+    }
+
+    state parse_ethernet {
+        packet.extract(hdr.ethernet);
+        transition select(hdr.ethernet.etherType) {
+            TYPE_IPV6 : parse_ipv6;
+            default : accept;
+        }
+    }
+
+    state parse_ipv6 {
+        packet.extract(hdr.ipv6);
+        transition select(hdr.ipv6.nextHdr) {
+            ICMPV6 : parse_icmpv6;
+            default : accept;
+        }
+    }
+
+    state parse_icmpv6 {
+        packet.extract(hdr.icmpv6);
+        transition accept;
+    }
+}
+
+
+/*************************************************************************
+************   C H E C K S U M    V E R I F I C A T I O N   *************
+*************************************************************************/
+
+control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
+    apply {  }
+}
+
+
+/*************************************************************************
+**************  I N G R E S S   P R O C E S S I N G   *******************
+*************************************************************************/
+
+register<bit<9>>(BUCKET_COUNT) ip_port_reg;
+register<bit<1>>(BUCKET_COUNT) bloom_filter;
+
+control MyIngress(inout headers hdr,
+                  inout metadata meta,
+                  inout standard_metadata_t standard_metadata) {
+
+    action drop() {
+        mark_to_drop(standard_metadata);
+        meta.should_drop = true;
+    }
+
+    action multicast_all() {
+        standard_metadata.mcast_grp = 1;
+        hdr.ipv6.hopLimit = hdr.ipv6.hopLimit - 1;
+    }
+
+    action mac_forward(egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+        hdr.ipv6.hopLimit = hdr.ipv6.hopLimit - 1;
+    }
+
+    table mac_lookup {
+        key = {
+            hdr.ethernet.dstAddr : exact;
+        }
+        actions = {
+            multicast_all;
+            mac_forward;
+            drop;
+        }
+        size = 1024;
+        default_action = multicast_all;
+    }
+
+    action jenkins_hash(in bit<32> key, out bit<32> hash_result) {
+        // Split the 32-bit key into four 8-bit chunks
+        // the bytes are 32 bits long to add them to the hash_result
+        // (both need to be the same size)
+        bit<32> byte0 = key & 0xFF;
+        bit<32> byte1 = (key >> 8) & 0xFF;
+        bit<32> byte2 = (key >> 16) & 0xFF;
+        bit<32> byte3 = (key >> 24) & 0xFF;
+
+        // Initialize hash to zero
+        hash_result = 0;
+
+        // Process each byte, following the JOAT steps
+        hash_result = hash_result + byte0;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        hash_result = hash_result + byte1;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        hash_result = hash_result + byte2;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        hash_result = hash_result + byte3;
+        hash_result = hash_result + (hash_result << 10);
+        hash_result = hash_result ^ (hash_result >> 6);
+
+        // Final mixing steps
+        hash_result = hash_result + (hash_result << 3);
+        hash_result = hash_result ^ (hash_result >> 11);
+        hash_result = hash_result + (hash_result << 15);
+
+        // Make it within bucket size
+        hash_result = hash_result % BUCKET_COUNT;
+    }
+
+    action get_hash_inputs(in bit<128> src_addr, out bit<32> input1, out bit<32> input2, out bit<32> input3) {
+        bit<32> chunk1 = (bit<32>)src_addr; // first (rightmost) 32 bits of src_addr
+        bit<32> chunk2 = (bit<32>)(src_addr >> 32); // the next 32 bits of src_addr
+        bit<32> chunk3 = (bit<32>)(src_addr >> 64); // the next 32 bits of src_addr
+        bit<32> chunk4 = (bit<32>)(src_addr >> 96); // the last (leftmost) 32 bits of src_addr
+
+        input1 = chunk1 ^ chunk2 ^ chunk3 ^ chunk4;
+        input2 = chunk2 ^ (chunk3 << 8) ^ (chunk4 >> 8);
+        input3 = chunk3 ^ (chunk4 << 16) ^ (chunk1 >> 16);
+    }
+
+    apply {
+        meta.should_drop = false;
+        meta.skip_processing = false;
+
+        // Check if the packet comes from an internal port, i.e., any port > 5
+        if (standard_metadata.ingress_port > 5) {
+            // Forward the packet without any processing
+            meta.skip_processing = true;
+        }
+
+        // Check if the packet is IPv6
+        if (!meta.should_drop && !meta.skip_processing && hdr.ipv6.isValid()) {
+            //// Get the hash values of the source address
+            // Get the source address of the packet
+            bit<128> src_addr = hdr.ipv6.srcAddr;
+
+            // Get the four 32-bit inputs for the hash function
+            bit<32> input1;
+            bit<32> input2;
+            bit<32> input3;
+            get_hash_inputs(src_addr, input1, input2, input3);
+
+            // Compute the hash value
+            bit<32> hash1;
+            bit<32> hash2;
+            bit<32> hash3;
+
+            jenkins_hash(input1, hash1);
+            jenkins_hash(input2, hash2);
+            jenkins_hash(input3, hash3);
+
+            // Check if the packet is an ICMPv6 NS
+            if (hdr.icmpv6.isValid() && hdr.icmpv6.type == ICMPV6_NS) {
+                // Check if the source address was not seen before using the bloom filter
+                bit<1> bf_val1;
+                bit<1> bf_val2;
+                bit<1> bf_val3;
+
+                bloom_filter.read(bf_val1, hash1);
+                bloom_filter.read(bf_val2, hash2);
+                bloom_filter.read(bf_val3, hash3);
+
+                if (bf_val1 == 0 || bf_val2 == 0 || bf_val3 == 0) {
+                    // Add the source address to the bloom filter
+                    bloom_filter.write(hash1, 1);
+                    bloom_filter.write(hash2, 1);
+                    bloom_filter.write(hash3, 1);
+
+                    // Add the source address to the ip_port register
+                    ip_port_reg.write(hash1, standard_metadata.ingress_port);
+                }
+            }
+
+            // Check if the source address port pair is invalid
+            bit<9> port_val;
+            ip_port_reg.read(port_val, hash1);
+            if (port_val != standard_metadata.ingress_port) {
+                // Drop the packet
+                drop();
+            }
+        }
+
+        if (hdr.ethernet.isValid() && !meta.should_drop)
+            mac_lookup.apply();
+    }
+}
+
+/*************************************************************************
+****************  E G R E S S   P R O C E S S I N G   *******************
+*************************************************************************/
+
+control MyEgress(inout headers hdr,
+                 inout metadata meta,
+                 inout standard_metadata_t standard_metadata) {
+
+    action drop() {
+        mark_to_drop(standard_metadata);
+    }
+
+    apply {
+        // Prune multicast packet to ingress port to preventing loop
+        if (standard_metadata.egress_port == standard_metadata.ingress_port)
+            drop();
+    }
+}
+
+/*************************************************************************
+*************   C H E C K S U M    C O M P U T A T I O N   **************
+*************************************************************************/
+
+control MyComputeChecksum(inout headers hdr, inout metadata meta) {
+     apply {
+
+    }
+}
+
+
+/*************************************************************************
+***********************  D E P A R S E R  *******************************
+*************************************************************************/
+
+control MyDeparser(packet_out packet, in headers hdr) {
+    apply {
+        packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv6);
+        packet.emit(hdr.icmpv6);
+    }
+}
+
+/*************************************************************************
+***********************  S W I T C H  *******************************
+*************************************************************************/
+
+V1Switch(
+MyParser(),
+MyVerifyChecksum(),
+MyIngress(),
+MyEgress(),
+MyComputeChecksum(),
+MyDeparser()
+) main;
