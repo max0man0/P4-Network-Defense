@@ -1,5 +1,6 @@
 # P4-Network-Defense
 ## Table of Contents
+- Project Summary
 - Prerequisites
 - Before Starting
 - File List
@@ -9,6 +10,8 @@
     - Compilation and Running
     - Executing The Experiments & Getting The Results
     - Terminating The Mininet Network
+## Project Summary
+We are developing a defence system against flooding and spoofing attacks in a P4 switch. Our work explores two approaches: a P4 rule-based approach, which uses predefined rules to detect and mitigate attacks, and an ML-based approach, where we generate a surrogate decision tree from the ML model and apply the extracted rules in a P4 program for real-time packet processing. 
 ## Prerequisites
 - [P4 Development Environment](https://github.com/p4lang/tutorials?tab=readme-ov-file#obtaining-required-software)
 ## Before Starting
