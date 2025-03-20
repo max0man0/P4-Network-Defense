@@ -45,7 +45,7 @@ Go to each file that starts with `run_` inside the `.../traffic/` directory and 
     - If the filename is `defense.p4.bak`, it means that it will not be compiled.
 - `.../ml.p4`: The P4 program for the ML in P4 approach.
     - If the filename is `ml.p4.bak`, it means that it will not be compiled.
-- `.../multicast.p4`: A P4 program that only forwards packets (No defense). It always used in all switches except `s1`, i.e., the victim switch, and only sometimes used in `s1`.
+- `.../multicast.p4`: A P4 program that only forwards packets (No defense). It is always used in all switches except `s1`, i.e., the victim switch, and only sometimes used in `s1`.
 - `.../test.p4`: A P4 program used for debugging.
     - If the filename is `test.p4.bak`, it means that it will not be compiled.
 ## How to Run
@@ -76,7 +76,7 @@ In this section, we will prepare according to the P4 program that we want to exe
 > The steps in this section must be done everytime you want to change the P4 program to be executed in `s1`
 - Make sure that the **P4 Source Code File** to be executed in `s1` ends in `.p4`, i.e., does not end with `.p4.bak`.
 - In `.../topo/topo.json`, modify the JSON value in `switches`->`s1`->`runtime_json` to the appropriate **Switch Runtime JSON File** according to the P4 program to be executed in `s1`.
-- In `.../Makefile`, modify the line that contains `run_args += -j $(BUILD_DIR)/[compiled_p4_program].json`, where `[compiled_p4_program]` is **P4 Source Code File** without the `.p4` suffix.
+- In `.../Makefile`, modify the line that contains `run_args += -j $(BUILD_DIR)/[compiled_p4_program].json`, where `[compiled_p4_program]` should be **P4 Source Code File** without the `.p4` suffix.
 ### Compilation and Running
 In this section, we will compile and run the P4 program we prepared in the Preperation step.  
   
@@ -100,12 +100,13 @@ From the same directory as the `Makefile` file, run `make clean` followed by `ma
 In this section, we will run the traffic sending Python scripts to execute the experiments on the currently running Mininet network.  
 1. **Preparing Wireshark**: Run Wireshark and make sure it is capturing the traffic from the `s1-eth6` interface, i.e., the network link connected to the victim.
 2. **Sending Traffic**: The details on what traffic sending scripts to execute and how to execute them is described in `.../traffic/experiment scripts.txt`.  
-3. **Wait for the traffic sending scripts to complete**: you can know when the wireshark packet counter (in the bottom right of the window) stops increasing.
+3. **Wait for the traffic sending scripts to complete**: you can know when you see that the Wireshark packet counter (in the bottom right of the window) stopped increasing.
 4. **Get The Results**:
     - The Wireshark capture contains all of the packets that exited the switch towards the victim.
     - (After all experiment traffic stops,) Use the python scripts `.../results/read_rule_based_drop.py` (if the Rule-Based Program was loaded) or `.../results/read_ml_drop.py`(if the ML Program was loaded) to print a simple report of the dropped packets (inside the switch) and their types.
 
-> Important Note: After finishing **each** experiment and getting its results, you must exit the Mininet network, clean the environment using `make clean`. After that, you may start the network again using `make run` if there is another experiment to run.
+> [!IMPORTANT]
+> After finishing **each** experiment and getting its results, you must exit the Mininet network and clean the environment using `make clean`. After that, you may start the network again using `make run` if there is another experiment to run.
 ### Terminating The Mininet Network
 To exit the Mininet CLI, type `exit` or press `CTRL+d`.  
 It is recommended to clean the environment after exiting the Mininet CLI by entering the command `make clean`.
