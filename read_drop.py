@@ -3,7 +3,6 @@ import pandas as pd
 
 THRIFT_PORT = 9090
 REGISTER_NAME = "drop_counter_reg"
-# write the drop counters according to the following
 DROP_COUNTER_LABLES = (
     ("External Spoofing (hop count)", "TCP attack (other)"),
     ("External Spoofing (suspicious counter)", "TCP attack (other)"),
@@ -38,10 +37,10 @@ def read_register(register_name: str) -> list[str]:
             # Print the output of the command
             print("Command executed successfully:")
 
-            # Parse the output to get the values from the register (excluding the zeros)
+            # Parse the output to get the values from the register
             cmd = result.stdout.split("\n")[3]
             csv_list = cmd.split(": ")[1].split("= ")[1].split(", ")
-            csv_list_values = [value for value in csv_list]
+            csv_list_values = [value for value in csv_list] # You may add a filtering condition here
             return csv_list_values
         else:
             # Print the error if the command fails
