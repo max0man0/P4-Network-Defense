@@ -1,13 +1,17 @@
-#command to kill running python processes
+--------------------------------- Utilities ----------------------------------
+
+# command to kill all (running) traffic sending python processes (use with caution)
 ps aux | grep -v grep | grep send | awk ' { print $2 } ' | sudo xargs kill -9  
 
---------------------------------- Preparation -----------------
+--------------------------------- Preparation -------------------------------
 
-# must be executed before any attack in Heuristic P4
+# Must be executed before any traffic sending scripts in rule-based P4,
+# otherwise all internal traffic will be dropped by the internal spoofing module
+# regardless if it was an attack or not.
 sudo ./run_dad_send.sh h101
 
 
---------------------------------- Internal Flooding-----------------
+--------------------------------- Internal Flooding----------------------------
 
 
 sudo ./run_ext_normal.sh h12
@@ -24,7 +28,7 @@ sudo ./run_int_flood.sh h101
 sudo ./run_int_flood.sh h104
 
 
---------------------------------- External Flooding-----------------
+--------------------------------- External Flooding---------------------------
 sudo ./run_ext_normal.sh h3
 sudo ./run_ext_normal.sh h23
 sudo ./run_ext_normal.sh h43
@@ -43,7 +47,7 @@ sudo ./run_ext_flood.sh h50
 sudo ./run_ext_flood.sh h70
 
 
----------------------------------------------------------- External DDOS------------------------------------------------------
+----------------------------------- External DDOS-------------------------------
 sudo ./run_ext_normal.sh h9
 sudo ./run_ext_normal.sh h29
 sudo ./run_ext_normal.sh h49
@@ -62,7 +66,7 @@ sudo ./run_ext_spoofed_flood.sh h60
 sudo ./run_ext_spoofed_flood.sh h80
 
 
---------------------------------------------------- Internal Spoofing -----------------------
+---------------------------------- Internal Spoofing -----------------------
 sudo ./run_ext_normal.sh h15
 sudo ./run_ext_normal.sh h35
 sudo ./run_ext_normal.sh h55
@@ -72,7 +76,7 @@ sudo ./run_int_spoof.sh h101
 sudo ./run_int_spoof.sh h104
 
 
----------------------------------------------------------- External Spoofing------------------------------------------------------
+---------------------------------- External Spoofing-----------------------------------
 sudo ./run_ext_normal.sh h6
 sudo ./run_ext_normal.sh h26
 sudo ./run_ext_normal.sh h46
