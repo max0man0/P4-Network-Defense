@@ -3,19 +3,7 @@ import pandas as pd
 
 THRIFT_PORT = 9090
 OUTPUT_FILE = "./csv/features.csv"
-# int_flood_durations_ml
-# flow
-# prefix
 REGISTER_NAME = "metadata_reg"
-# ingress_packet_processing_durations_reg
-# flow_inter_packet_times_reg
-# prefix_inter_packet_times_reg
-# REGISTER_NAMES = (
-#     "packet_ids_reg",
-#     "src_addr_reg",
-#     "flow_inter_packet_times_reg",
-#     "prefix_inter_packet_times_reg",
-# )
 
 def read_register(register_name: str) -> list[str]:
     """
@@ -51,12 +39,7 @@ def read_register(register_name: str) -> list[str]:
 
 
 if __name__ == "__main__":
-    # Read the values from the registers
-    # duration_list = []
-    # for REGISTER_NAME in REGISTER_NAMES:
-    #     print(f"Reading values from register: {REGISTER_NAME}")
-    #     values = read_register(REGISTER_NAME)
-    #     duration_list.append(values)
+    # Read the values from the register
     metadata_list = read_register("metadata_reg")
     
     # Initialize 11 empty lists
@@ -77,13 +60,6 @@ if __name__ == "__main__":
     data = {
         "Packet ID": lists[0],
         "Source Address": lists[1],
-        # "Ingress Packet Processing Durations": duration_list[2],
-        # "Flow Inter Packet Times 1": lists[2],
-        # "Flow Inter Packet Times 2": lists[3],
-        # "Flow Inter Packet Times 3": lists[4],
-        # "Prefix Inter Packet Times 1": lists[5],
-        # "Prefix Inter Packet Times 2": lists[6],
-        # "Prefix Inter Packet Times 3": lists[7],
         "Hop Count": lists[2],
         "New Addresses Seen": lists[3],
         "Port": lists[4],
@@ -96,7 +72,6 @@ if __name__ == "__main__":
         "prefix_window_start_time 1": lists[11],
         "prefix_window_start_time 2": lists[12],
         "prefix_window_start_time 3": lists[13],
-        # "Duration Register Timestamp": duration_timestamp_list
     }
 
     # Convert the dictionary to a DataFrame

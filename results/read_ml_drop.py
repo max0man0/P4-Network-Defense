@@ -1,22 +1,23 @@
 import subprocess
-import pandas as pd
 
 THRIFT_PORT = 9090
 REGISTER_NAME = "drop_counter_reg"
 # write the drop counters according to the following
-# 0	External Spoofing		TCP benign (tcp tsval 1000)
-# 1	External Spoofing		TCP attack (other tcp)
-# 2	External Spoofing		NS (all NS)
+# index Attack Label			Packet Type
+# ----------------------------------------------
+# 0	    External Spoofing		TCP benign (tcp tsval 1000)
+# 1	    External Spoofing		TCP attack (other tcp)
+# 2	    External Spoofing		NS (all NS)
 
-# 3	Internal Spoofing 		TCP benign (tcp tsval 1000)
-# 4	Internal Spoofing 		TCP attack (other tcp)
-# 5	Internal Spoofing		NS (all NS)
+# 3	    Internal Spoofing 		TCP benign (tcp tsval 1000)
+# 4	    Internal Spoofing 		TCP attack (other tcp)
+# 5	    Internal Spoofing		NS (all NS)
 
-# 6	External Flooding		TCP benign (tcp tsval 1000)
-# 7	External Flooding		TCP attack (other tcp)
-# 8	External Flooding		NS (all NS)
+# 6	    External Flooding		TCP benign (tcp tsval 1000)
+# 7	    External Flooding		TCP attack (other tcp)
+# 8	    External Flooding		NS (all NS)
 
-# 9	Internal Flooding		TCP benign (tcp tsval 1000)
+# 9	    Internal Flooding		TCP benign (tcp tsval 1000)
 # 10	Internal Flooding		TCP attack (other tcp)
 # 11	Internal Flooding		NS (all NS)
 
