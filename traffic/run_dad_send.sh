@@ -2,7 +2,7 @@
 
 # Check if PID is provided as an argument
 if [ -z "$1" ]; then
-    echo "Usage: $0 host"
+    echo "Usage: $0 <first host name>"
     exit 1
 fi
 
@@ -15,7 +15,7 @@ if [ -z "$base_pid" ]; then
     exit 1
 fi
 
-# List of host PIDs based on the formula: h101_PID, h101_PID+2, h101_PID+4, ..., h101_PID+10
+# List of host PIDs based on the formula: base_pid, base_pid+2, base_pid+4, ..., base_pid+10
 host_pids=($(seq $base_pid 2 $((base_pid + 10))))
 
 # Set the PID of h0

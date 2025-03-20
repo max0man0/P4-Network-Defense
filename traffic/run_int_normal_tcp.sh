@@ -2,14 +2,14 @@
 
 # Check if PID is provided as an argument
 if [ -z "$1" ]; then
-    echo "Usage: $0 <h101_PID>"
+    echo "Usage: $0 <first host name>"
     exit 1
 fi
 
 # Base PID from the argument
 base_pid=$(ps aux | grep "mininet:$1" | grep -v grep | awk '{print $2}' | head -n 1)
 
-# List of host PIDs based on the formula: h101_PID+6, h101_PID+8, h101_PID+10
+# List of host PIDs based on the formula: base_pid, base_pid+2, base_pid+4
 host_pids=($(seq $((base_pid )) 2 $((base_pid + 4))))
 
 

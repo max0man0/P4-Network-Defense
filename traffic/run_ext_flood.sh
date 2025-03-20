@@ -2,7 +2,7 @@
 
 # Check if PID is provided as an argument
 if [ -z "$1" ]; then
-    echo "Usage: $0 <h101_PID>"
+    echo "Usage: $0 <first host name>"
     exit 1
 fi
 
