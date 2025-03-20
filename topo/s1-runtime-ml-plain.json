@@ -127,6 +127,10 @@
           {
             "egress_port": 11,
             "instance": 1
+          },
+          {
+            "egress_port": 12,
+            "instance": 1
           }
         ]
       }
