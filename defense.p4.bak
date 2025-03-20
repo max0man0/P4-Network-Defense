@@ -572,31 +572,6 @@ control MyIngress(inout headers hdr,
 
         // check if the packet is IPv6
         if (hdr.ipv6.isValid() && !skip_external_spoofing) {
-
-            /***** Suspicous Counter Check *****/
-            // // Check if the source address is in the suspicious table
-            // suspicious_counter_index.apply(); // set the current_suspicious_counter_entry
-
-            // // if the counter exists, check if it is above the threshold
-            // if (meta.current_suspicious_counter_entry.valid) {
-            //     bit<32> suspicious_counter_value;
-            //     suspicious_counter_reg.read(suspicious_counter_value, (bit<32>)meta.current_suspicious_counter_entry.index);
-            //     if (suspicious_counter_value >= SUSPICIOUS_THRESHOLD) {
-            //         // check if the packet is benign (timestamp tsval == 1000)
-            //         if (hdr.tcp.isValid() && hdr.tcp_option_ts.isValid() && hdr.tcp_option_ts.tsVal == 1000) {
-            //             // mark the packet for drop
-            //             suspicious_counter_benign_drop();
-            //         } else { // if the packet is not benign
-            //             // mark the packet for drop
-            //             suspicious_counter_other_drop();
-            //         }
-            //         // exit the processing pipeline
-            //         return;
-            //     }
-            // }
-            /*************************************/
-
-
             /***** Hop Count (Metadata) Table Check *****/
             // Check if the source address is in the existing networks table and apply the hop count table
             // to drop spoofed packets
@@ -618,39 +593,6 @@ control MyIngress(inout headers hdr,
                 return;
             }
             /*******************************************/
-
-            /***** Suspicious Counter Increment *****/
-            // // Note: the current suspicious counter entry validitiy is checked because
-            // // we might increment the suspicious counter in the following block
-            // if (meta.should_drop && meta.current_suspicious_counter_entry.valid) {
-            //     // check if the source address has been seen before using the bloom filter
-
-            //     get_hash_inputs_addr(hdr.ipv6.srcAddr, hash_input1, hash_input2, hash_input3);
-            //     jenkins_hash(hash_input1, hash1);
-            //     jenkins_hash(hash_input2, hash2);
-            //     jenkins_hash(hash_input3, hash3);
-
-            //     bit<1> bf_reg1_value;
-            //     bit<1> bf_reg2_value;
-            //     bit<1> bf_reg3_value;
-            //     ext_src_addr_bf_reg.read(bf_reg1_value, hash1);
-            //     ext_src_addr_bf_reg.read(bf_reg2_value, hash2);
-            //     ext_src_addr_bf_reg.read(bf_reg3_value, hash3);
-
-            //     // check if the source address has not been seen before
-            //     if (bf_reg1_value == 0 || bf_reg2_value == 0 || bf_reg3_value == 0) {
-            //         increment_suspicious_counter((bit<8>)meta.current_suspicious_counter_entry.index);
-            //         // set the bloom filter bits to 1
-            //         ext_src_addr_bf_reg.write(hash1, 1);
-            //         ext_src_addr_bf_reg.write(hash2, 1);
-            //         ext_src_addr_bf_reg.write(hash3, 1);
-            //     }
-            //     /****************************************************************************************/
-
-            //     // Note: no need to drop() here, as the packet is already marked for drop
-            //     // exit the processing pipeline
-            //     return;
-            // }
         }
 
 
