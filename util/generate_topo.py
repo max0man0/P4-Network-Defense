@@ -3,6 +3,7 @@ This script generates a JSON file that describes the topology of the network.
 """
 import json
 
+OUTPUT_FILE = "./topo/topo.json"
 NUM_HOSTS = 107
 NUM_CONSUMER_SWITCHES = 6
 CONSUMER_SWITCH_NUMBERS = (1, 2, 8, 9, 10, 11)
@@ -136,68 +137,8 @@ def main():
         "links": generate_links(NUM_HOSTS_PER_SWITCH)
     }
 
-    with open('./topo/topo.json', 'w') as f:
+    with open(OUTPUT_FILE, 'w') as f:
         json.dump(topo, f, indent=4)
 
 if __name__ == "__main__":
     main()
-
-
-# """
-# This script generates a JSON file that describes the topology of the network.
-# Note: this script will only work for 1 switch. Must be modified to work with multiple switches.
-# """
-# import json
-
-# NUM_HOSTS = 2
-# NUM_SWITCHES = 1
-
-# def generate_hosts(num_hosts):
-#     hosts = {}
-#     for i in range(1, num_hosts + 1):
-#         subnet_index = (i - 1) // 10
-#         host_number = (i - 1) % 10 + 1
-#         ipv6 = f"2001:db8::{subnet_index}:0:0:0:{host_number}"
-#         ipv4 = f"10.0.{subnet_index}.{host_number}"
-#         mac = f"02:01:01:01:{i // 256:02x}:{i % 256:02x}"
-#         hosts[f"h{i}"] = {
-#             "ip": ipv4,
-#             "mac": mac,
-#             "commands": [
-#                 "sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0", # Enable IPv6
-#                 # f"sudo ip -6 addr add {ipv6}/64 dev eth0", # Assign IP address
-#             ]
-#         }
-        
-#         # For the first host, make it act as a router
-#         if i == 1:
-#             hosts[f"h{i}"]["commands"].append("sudo ip -6 addr add 2001:222:1::2/64 dev eth0")
-
-#     return hosts
-
-# def generate_switches(num_switches):
-#     switches = {}
-#     for i in range(1, num_switches + 1):
-#         switches[f"s{i}"] = {
-#             "runtime_json": f"topo/s{i}-runtime.json"
-#         }
-#     return switches
-
-# def generate_links(num_hosts):
-#     links = []
-#     for i in range(1, num_hosts + 1):
-#         links.append([f"h{i}", f"s1-p{i}"])
-#     return links
-
-# def main():
-#     topo = {
-#         "hosts": generate_hosts(NUM_HOSTS),
-#         "switches": generate_switches(NUM_SWITCHES),
-#         "links": generate_links(NUM_HOSTS)
-#     }
-
-#     with open('./topo/topo.json', 'w') as f:
-#         json.dump(topo, f, indent=4)
-
-# if __name__ == "__main__":
-#     main()
