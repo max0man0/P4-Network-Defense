@@ -1,5 +1,4 @@
 # P4-Network-Defense
-
 ## Table of Contents
 - Prerequisites
 - Before Starting
@@ -10,8 +9,6 @@
     - Compilation and Running
     - Executing The Experiments & Getting The Results
     - Terminating The Mininet Network
-
-
 ## Prerequisites
 - [P4 Development Environment](https://github.com/p4lang/tutorials?tab=readme-ov-file#obtaining-required-software)
 ## Before Starting
