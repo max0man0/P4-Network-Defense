@@ -13,7 +13,7 @@
 - [P4 Development Environment](https://github.com/p4lang/tutorials?tab=readme-ov-file#obtaining-required-software)
 ## Before Starting
 In order to everything to run as expected, do the following before starting anything.  
-Go to each file that starts with `run_` inside the `.../traffic/` directory and change the value of the `python_interpreter` variable to the full (absolute) path of the P4-Dev Python binary.
+Go to each file that has name that starts with `run_` inside the `.../traffic/` directory and change the value of the `python_interpreter` variable to the full (absolute) path of the P4-Dev Python binary.
 ## File List
 - `.../csv/`: Contains the ingress processing durations for the Rule-Based P4 Experiments.
 - `.../generated_code/`: Contains part P4 files, which are files containing P4 code that is injected inside other P4 code using `#include`.
