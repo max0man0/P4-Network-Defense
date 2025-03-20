@@ -1,4 +1,7 @@
-def convert_to_c_syntax(input_file, output_file):
+INPUT_FILE = "modified_rules.txt"
+OUTPUT_FILE = "generated_code/ml_surrogate_model_rules.p4.part"
+
+def convert_to_p4_syntax(input_file, output_file):
     """
     Converts Python if statements to C syntax with specified variable name changes.
     This version handles the specific format of the input file, where each if and else creates
@@ -174,8 +177,4 @@ def multiply_and_truncate_numbers(condition):
     return modified_condition
 
 if __name__ == "__main__":
-    # Hard code the input and output file names as requested
-    input_file = "modified_rules 1.txt"
-    output_file = "generated_code/ml_surrogate_model_rules.p4.part"
-    
-    convert_to_c_syntax(input_file, output_file)
+    convert_to_p4_syntax(INPUT_FILE, OUTPUT_FILE)
