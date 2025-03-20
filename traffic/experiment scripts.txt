@@ -1,3 +1,5 @@
+# In order to execute the scripts in this file, make sure that you are in the "traffic" directory
+
 --------------------------------- Utilities ----------------------------------
 
 # command to kill all (running) traffic sending python processes (use with caution)
